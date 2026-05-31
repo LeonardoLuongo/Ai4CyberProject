@@ -33,8 +33,8 @@ def plot_adversarial_showcase(clean_img: np.ndarray, adv_img: np.ndarray,
     adv_img_f = adv_img.astype(np.float32) / 255.0 if adv_img.max() > 1.0 else adv_img.copy()
 
     # Calcolo del rumore e amplificazione per visibilità
-    amp_fact = 4
-    amp_coeff = 0.0
+    amp_fact = 10
+    amp_coeff = 0.5
     noise = adv_img_f - clean_img_f
     noise_visual = np.clip((noise * amp_fact) + amp_coeff, 0, 1)
 
@@ -164,35 +164,61 @@ def plot_gradcam_shift(clean_img: np.ndarray, adv_img: np.ndarray,
                        save_flag: bool = False, save_path: str = None):
     """
     Sovrappone le mappe di attivazione (Saliency/GradCAM) sulle immagini.
-    Aggiunge una colonna centrale con la differenza assoluta dell'attenzione.
+    Usa una colormap divergente per la differenza: Rosso = Attenzione Guadagnata, Blu = Persa.
     """
     def overlay_cam(img, mask, colormap=cv2.COLORMAP_JET):
-        # Normalizziamo l'immagine tra 0 e 255 (uint8) se non lo è
         img_uint8 = (img * 255).astype(np.uint8) if img.max() <= 1.0 else img.astype(np.uint8)
-        
-        # Applichiamo colormap alla maschera
         heatmap = cv2.applyColorMap(np.uint8(255 * mask), colormap)
         heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-        
-        # Sovrapposizione
         return cv2.addWeighted(img_uint8, 0.6, heatmap, 0.4, 0)
 
-    # 1. Mappa Originale (Usa JET)
-    over_clean = overlay_cam(clean_img, clean_cam, cv2.COLORMAP_JET)
-    
-    # 2. Mappa Avversaria (Usa JET)
-    over_adv = overlay_cam(adv_img, adv_cam, cv2.COLORMAP_JET)
-    
-    # 3. Mappa Differenza
-    # Calcoliamo quanto è cambiata l'attenzione (valore assoluto)
-    cam_diff = np.abs(adv_cam - clean_cam)
-    # Normalizziamo la differenza tra 0 e 1 per sicurezza
-    if cam_diff.max() > 0:
-        cam_diff = cam_diff / cam_diff.max()
-    # Sovrapponiamo la differenza sull'immagine pulita usando HOT (Nero -> Rosso -> Giallo/Bianco)
-    over_diff = overlay_cam(clean_img, cam_diff, cv2.COLORMAP_HOT)
+    def overlay_diverging_diff(img, diff_mask):
+        min_val = np.min(diff_mask) # e.g., -0.219 (Blu)
+        max_val = np.max(diff_mask) # e.g., +0.076 (Rosso)
 
-    # Setup del plot a 3 colonne
+        print(f"  -> [GradCAM] Max perdita (Blu): {min_val:.3f}")
+        print(f"  -> [GradCAM] Max guadagno (Rosso): {max_val:.3f}")
+
+        # Inizializziamo la maschera a 0
+        scaled_diff = np.zeros_like(diff_mask)
+
+        # Scaliamo il Blu in modo indipendente (da -1 a 0)
+        if min_val < 0:
+            scaled_diff[diff_mask < 0] = diff_mask[diff_mask < 0] / abs(min_val)
+            
+        # Scaliamo il Rosso in modo indipendente (da 0 a 1)
+        if max_val > 0:
+            scaled_diff[diff_mask > 0] = diff_mask[diff_mask > 0] / max_val
+
+        norm_diff = (scaled_diff + 1.0) / 2.0
+        cmap = plt.get_cmap('bwr')
+        heatmap_rgb = cmap(norm_diff)[:, :, :3]
+        
+        # Calcoliamo l'opacità
+        alpha_mask = np.abs(scaled_diff)
+        
+        # THRESHOLD: Eliminiamo il rumore di fondo per ripristinare la nitidezza!
+        # Qualsiasi variazione sotto il 20% della forza massima viene resa invisibile.
+        alpha_mask[alpha_mask < 0.2] = 0.0 
+        
+        # Opacità massima all'80% per far vedere i tratti somatici sotto il colore acceso
+        alpha_mask = alpha_mask[..., np.newaxis] * 0.8 
+        
+        img_float = img.astype(np.float32) / 255.0 if img.max() > 1.0 else img.astype(np.float32)
+        blended = (1.0 - alpha_mask) * img_float + alpha_mask * heatmap_rgb
+        return blended
+
+    # Mappe originali
+    over_clean = overlay_cam(clean_img, clean_cam, cv2.COLORMAP_JET)
+    over_adv = overlay_cam(clean_img, adv_cam, cv2.COLORMAP_JET)
+    
+    # Calcolo della differenza REALE (segno + e -)
+    cam_diff = adv_cam - clean_cam 
+    
+    # Sovrapposizione divergente
+    over_diff = overlay_diverging_diff(clean_img, cam_diff)
+
+    # Rendering del plot
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
     axes[0].imshow(over_clean)
@@ -200,7 +226,7 @@ def plot_gradcam_shift(clean_img: np.ndarray, adv_img: np.ndarray,
     axes[0].axis('off')
 
     axes[1].imshow(over_diff)
-    axes[1].set_title("Attention Shift (Difference)")
+    axes[1].set_title("Attention Shift\n(Red = Gained, Blue = Lost)")
     axes[1].axis('off')
 
     axes[2].imshow(over_adv)

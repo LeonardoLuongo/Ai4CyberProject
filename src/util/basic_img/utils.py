@@ -43,3 +43,14 @@ def save_rgb_img(image_rgb: np.ndarray, path: str, debug=False):
             print(f"Immagine salvata in: {path}")
         else:
             print(f"Errore durante il salvataggio in: {path}")
+
+def load_bgr_image(path: str) -> np.array:
+    # OpenCV legge sempre in BGR di default
+    img_bgr = cv2.imread(path)
+    
+    if img_bgr is None:
+        print(f"Errore: Impossibile caricare l'immagine {path}")
+        return None
+    
+    # Ritorna l'immagine in BGR
+    return img_bgr
