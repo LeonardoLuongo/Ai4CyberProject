@@ -1,0 +1,40 @@
+name: ai4cyber_project
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Core Python
+  - python=3.11
+  - pip
+  
+  # Data Science & Computer Vision base
+  - numpy
+  - scipy
+  - scikit-learn
+  - pillow
+  
+  # Visualizzazione (Per le Security Evaluation Curves - Opzione 3 che abbiamo discusso)
+  - matplotlib
+  - seaborn
+  
+  # Utility per i cicli e il tracking
+  - tqdm
+  
+  # Installazioni specifiche tramite PIP per CUDA 13.0 e librerie di nicchia
+  - pip:
+      # PyTorch compilato specificamente per CUDA 13.0
+      - --extra-index-url https://download.pytorch.org/whl/cu130
+      - torch
+      - torchvision
+      - torchaudio
+      
+      # Modello NN1 fornito a lezione
+      - facenet-pytorch
+      
+      # Libreria cuore per gli attacchi avversari (Adversarial Robustness Toolbox)
+      - adversarial-robustness-toolbox
+
+      # Per visualizzare i risultati e avere statiche migliori
+      - opencv-python
+      - grad-cam
+      - umap-learn

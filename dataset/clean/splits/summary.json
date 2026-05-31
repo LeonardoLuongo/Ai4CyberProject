@@ -1,0 +1,12 @@
+{
+  "archive": "/content/dataset.tar",
+  "identity_meta": null,
+  "output_root": "/content/vggface2_subset",
+  "num_identities": 100,
+  "train_per_identity": 20,
+  "test_per_identity": 10,
+  "train_images": 2000,
+  "test_images": 1000,
+  "seed": 42,
+  "preprocessing": "none; original images extracted unchanged"
+}
