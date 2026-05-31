@@ -1,0 +1,41 @@
+
+1. The Targeted Success Rate (t-ASR) Curve
+
+  - Il Concetto: È l'esatto opposto della Security Evaluation Curve. Invece di
+    guardare l'accuratezza che scende, guardiamo il tasso di successo
+    dell'attaccante che sale all'aumentare di \epsilon.
+  - Perché è lo standard: Misura esplicitamente la percentuale di volte in cui
+    f(x) = y_{target}. Spesso si confrontano attacchi mirati diversi (es.
+    Targeted FGSM vs Targeted PGD) per vedere quale raggiunge prima il 100% di
+    successo con il minor budget di perturbazione.
+  - Architettura visiva: Un grafico lineare (Line Plot). Epsilon sull'asse X,
+    Targeted ASR (%) sull'asse Y. Linea ascendente.
+
+2. Target Confidence Growth (L'attrazione gravitazionale del target)
+
+  - Il Concetto: Negli attacchi mirati, specialmente a Epsilon molto bassi
+    (es. 0.02), l'attacco potrebbe fallire nel cambiare la label finale (t-ASR
+    = 0%). Tuttavia, la probabilità della classe bersaglio nel livello Softmax
+    potrebbe essere passata dallo 0.001% (niente) al 45% (quasi vittoria)!
+  - Perché è fondamentale: Dimostra che l'attacco sta funzionando a livello
+    matematico, "trascinando" la rete verso il bersaglio, anche se non ha ancora
+    superato la soglia di maggioranza.
+  - Architettura visiva: Un Boxplot. Epsilon sull'asse X, Probabilità (Softmax)
+    della Classe Bersaglio sull'asse Y. Mostrerà le scatole che "salgono" verso
+    l'1.0 all'aumentare dell'intensità.
+
+3. Source-to-Target Vulnerability Heatmap (La matrice di Impersonificazione)
+
+  - Il Concetto: Nel tuo dataset hai 100 identità. In letteratura è dimostrato
+    che lo spazio latente non è simmetrico. Potrebbe essere facilissimo per
+    l'Identità 0 impersonare l'Identità 5, ma matematicamente impossibile per
+    l'Identità 5 impersonare l'Identità 0 (magari per differenze geometriche del
+    viso).
+  - Trade-off Architetturale: Come notavi tu stesso nei messaggi precedenti, una
+    vera Matrice di Confusione 100x100 è un "muro di pixel" illeggibile.
+  - La Soluzione SOTA: Si crea una matrice di vulnerabilità su un sottoinsieme
+    strategico (es. le prime 10 identità, oppure le 5 più robuste contro le 5
+    più deboli). Righe = Identità Originale (Source), Colonne = Identità
+    Bersaglio (Target). Il calore della cella indica la Targeted ASR. Mostra
+    visivamente chi è facile da "hackerare" e chi no.
+

@@ -1,0 +1,41 @@
+
+1. UMAP: La Traiettoria Nello Spazio Latente (Come da tua intuizione)
+
+  - Il Concetto: Invece di guardare solo i pixel, estraiamo gli embeddings
+    a 512-dimensioni di FaceNet.
+  - Visualizzazione SOTA: Tracciamo i cluster delle identità "Clean". Poi, per
+    un'immagine avversaria, disegniamo una "freccia" (traiettoria) che parte dal
+    punto originale e mostra come l'attacco l'abbia "spinta" fisicamente fuori
+    dal suo cluster, finendo nel vuoto (error-generic) o dentro il cluster di
+    un'altra persona (error-specific).
+  - Costo: Basso/Medio. Molto d'impatto.
+
+2. Attention Shift (Grad-CAM): Dove guarda la rete?
+
+  - Il Concetto: L'Explainable AI usa mappe di calore (Saliency Maps / Grad-CAM)
+    per evidenziare quali pixel hanno convinto la rete della sua decisione.
+  - Visualizzazione SOTA: Un confronto fianco a fianco. Nell'immagine Clean,
+    FaceNet tipicamente "guarda" gli occhi e il naso. Nell'immagine Adversarial,
+    la mappa di calore spesso impazzisce: l'attacco forza la rete a prendere la
+    decisione guardando lo sfondo o i bordi dell'immagine, dimostrando che
+    l'attacco ha distrutto l'estrazione logica delle feature.
+  - Costo: Medio. Richiede di calcolare i gradienti rispetto all'ultimo layer
+    convoluzionale (si può fare facilmente in PyTorch).
+
+3. Analisi nel Dominio delle Frequenze (FFT del Rumore)
+
+  - Il Concetto: Paper recentissimi dimostrano che la vulnerabilità delle CNN
+    risiede nelle alte frequenze. L'occhio umano non percepisce cambiamenti ad
+    alta frequenza, ma le reti neurali ci fanno estremo affidamento.
+  - Visualizzazione SOTA: Calcoliamo la Trasformata di Fourier (FFT) del rumore
+    avversario (la perturbazione \delta). Il grafico mostrerà uno spettro 2D. Se
+    l'energia è concentrata ai bordi (alte frequenze), dimostrerai visivamente
+    perché l'attacco è impercettibile ma letale.
+  - Costo: Bassissimo (è pura matematica su matrici tramite Numpy). Valore
+    accademico altissimo.
+
+4. The Adversarial Showcase (Lo Standard Base)
+
+  - Il Concetto: L'imprescindibile Trittico: Immagine Originale -> Perturbazione
+    Amplificata (x10) -> Immagine Avversaria.
+  - Costo: Nullo. Serve sempre per mostrare a occhio nudo il risultato.

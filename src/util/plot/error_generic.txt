@@ -1,0 +1,36 @@
+
+1. Confidence Degradation Plot (Il decadimento della sicurezza)
+
+  - Il Concetto: Immagina che FaceNet, sull'immagine pulita, dica: "Sono sicuro
+    al 99% che sia Brad Pitt". Dopo un attacco FGSM debole (es. \epsilon=0.01),
+    la rete dice: "Sono sicuro al 51% che sia Brad Pitt".
+  - Perché è vitale: L'accuratezza non è cambiata (ha indovinato), quindi la
+    Security Evaluation Curve non registrerebbe alcun danno. In realtà,
+    l'attacco ha quasi distrutto la confidenza del modello!
+  - Visualizzazione: Un Violin Plot o un Boxplot che mostra come la probabilità
+    statistica della classe corretta crolli verso lo zero all'aumentare di
+    \epsilon, indipendentemente dal fatto che la label cambi o meno.
+
+2. Attack Success Rate (ASR)
+
+  - Il Concetto: È la metrica gemella dell'Accuratezza. Risponde alla domanda:
+    "Su 1000 immagini, quante volte l'attacco è riuscito a cambiare l'identità
+    originale in qualcos'altro?"
+  - Trade-off: È matematicamente l'inverso dell'accuratezza (Se l'Accuratezza
+    scende al 20%, l'ASR sale all'80%). Spesso nei paper si stampano entrambe:
+    l'Accuratezza per far vedere quanto il modello "resiste", l'ASR per far
+    vedere quanto l'algoritmo di attacco è "potente". Possiamo aggiungere l'ASR
+    nello stesso grafico della Security Curve (usando un doppio asse Y) o farne
+    uno separato.
+
+3. Transferability Matrix (La matrice di Trasferibilità) - Cruciale per il tuo Punto 5
+
+  - Il Concetto: Il Punto 5 della tua traccia chiede di "Verificare se gli
+    adversarial examples hanno effetto anche su NN2". La letteratura dimostra
+    che gli attacchi error-generic sono altamente trasferibili perché colpiscono
+    feature di base universali, mentre gli error-specific lo sono molto meno.
+  - Visualizzazione: Una Heatmap. Sulle righe i modelli di origine (es.
+    l'attacco generato su NN1), sulle colonne i modelli bersaglio (Testato su
+    NN1, Testato su NN2). Le celle mostrano il calo di accuratezza. Dimostrerà
+    visivamente il successo del tuo Punto 5.
+
