@@ -3,3 +3,5 @@
 *.jpeg
 **digest**
 **.pyc
+google_credentials.json
+credentials.json
