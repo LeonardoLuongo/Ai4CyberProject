@@ -60,7 +60,7 @@ class GoogleSheetLogger:
                 tester,
                 phase,               # es. "Clean Evaluation", "Targeted Attack"
                 attack_type,         # es. "None", "FGSM", "PGD"
-                str(epsilon),        # es. "0", "0.05", "0.1"
+                f"{float(epsilon):.4f}".replace('.', ','),
                 defense_type,        # es. "None", "JPEG Compression"
                 f"{accuracy:.4%}".replace('.', ','),  # Formattazione ITA per Google Sheets
                 f"{eer:.4%}".replace('.', ','),
