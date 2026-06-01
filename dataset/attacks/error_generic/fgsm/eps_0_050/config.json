@@ -1,0 +1,17 @@
+{
+  "attack_type": "fgsm",
+  "classifier": "facenet_pytorch.InceptionResnetV1(pretrained='vggface2', classify=True)",
+  "art_estimator": "PyTorchClassifier",
+  "eps": 0.05,
+  "max_allowed_eps": 0.1,
+  "targeted": false,
+  "input_dir": "dataset/clean/test",
+  "output_dir": "dataset/attacks/error_generic/fgsm/eps_0_050",
+  "num_images": 1000,
+  "max_images": null,
+  "batch_size": 64,
+  "image_size": 160,
+  "num_classes": 8631,
+  "device_type": "gpu",
+  "saved_format": "PNG"
+}

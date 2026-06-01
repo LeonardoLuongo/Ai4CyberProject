@@ -38,3 +38,33 @@ dependencies:
       - opencv-python
       - grad-cam
       - umap-learn
+
+      # Matematica Simbolica e Grafi
+      - mpmath
+      - sympy
+      - networkx
+      
+      # Networking e Richieste HTTP (Usati per il download sicuro di pesi pre-addestrati e dataset)
+      - requests
+      - urllib3
+      - certifi
+      - charset-normalizer
+      - idna
+      
+      # File System e Caching 
+      - filelock
+      - fsspec
+      
+      # Calcolo Parallelo e Gestione Thread (Backend utilizzati per velocizzare scikit-learn e numpy)
+      - joblib
+      - threadpoolctl
+      
+      # Templating e Rendering testuale 
+      - Jinja2
+      - MarkupSafe
+      
+      # Utility generiche di Sistema e Compatibilità del codice
+      - colorama           
+      - packaging          
+      - six                
+      - typing_extensions
