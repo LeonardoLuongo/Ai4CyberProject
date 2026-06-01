@@ -105,7 +105,7 @@ def calculate_biometric_metrics(embeddings, labels):
 
 
 # ==========================================
-# ESECUZIONE PRINCIPALE (SAFE PER WINDOWS)
+# ESECUZIONE PRINCIPALE 
 # ==========================================
 if __name__ == '__main__':
     # Disattivazione CUDNN bypass per Windows (evita i crash dei driver NVIDIA)
@@ -126,7 +126,7 @@ if __name__ == '__main__':
         print(f"Root identificata: {root_dir}")
         print(f"Dataset trovato con successo in: {dataset_path}")
 
-    # 3. Model Setup (Niente MTCNN)
+    # 3. Model Setup 
     resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
 
     # 4. DataLoader Setup
@@ -138,8 +138,6 @@ if __name__ == '__main__':
 
     dataset = datasets.ImageFolder(root=dataset_path, transform=transform_pipeline)
     
-    # num_workers=0 per massima stabilità multiprocesso su Windows.
-    # L'estrazione sarà comunque rapidissima grazie all'assenza dell'MTCNN.
     dataloader = DataLoader(dataset, batch_size=32, shuffle=False, num_workers=0)
 
     # 5. Extract & Evaluate
