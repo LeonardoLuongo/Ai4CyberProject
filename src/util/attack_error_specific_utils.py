@@ -11,14 +11,29 @@ def select_target_label(clean_predictions: np.ndarray, true_label: int, strategy
         return target
         
     elif strategy == "next-best":
+        # np.argsort ordina le probabilità dal più basso al più alto
         sorted_indices = np.argsort(clean_predictions[0])
+        
+        # L'ultimo (-1) è la classe con probabilità più alta (top-1)
         if sorted_indices[-1] == true_label:
-            return sorted_indices[-2]
+            return sorted_indices[-2] # Prende la seconda più alta
         else:
             return sorted_indices[-1]
             
+    elif strategy == "least-likely":
+        # La classe meno probabile in assoluto è il primo elemento dell'array ordinato
+        sorted_indices = np.argsort(clean_predictions[0])
+        
+        # Nel rarissimo caso in cui la classe vera fosse quella con probabilità più bassa (rete totalmente rotta),
+        # prendiamo la penultima peggiore per sicurezza.
+        if sorted_indices[0] == true_label:
+            return sorted_indices[1]
+        else:
+            return sorted_indices[0]
+            
     else:
-        raise ValueError("Strategia non supportata.")
+        raise ValueError(f"Strategia '{strategy}' non supportata. Scegli tra: random, next-best, least-likely.")
+
 
 def get_one_hot_target(target_class: int, num_classes: int = 8631) -> np.ndarray:
     """
