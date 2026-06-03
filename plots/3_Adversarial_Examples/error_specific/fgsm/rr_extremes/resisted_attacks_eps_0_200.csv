@@ -1,0 +1,4 @@
+dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
+8,"""Cherish_Lee""",5325,1471,4.238296241965145e-05,dataset/clean_cropped/NN1/008_n001564_Cherish_Lee/0005.jpg,dataset/attacks/error_specific/fgsm/rr_extremes/eps_0_200/008_n001564_Cherish_Lee/0005_to_5325.jpg
+75,"""Martin_Schulz""",4752,5308,0.00016690840129740536,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0007.jpg,dataset/attacks/error_specific/fgsm/rr_extremes/eps_0_200/075_n005738_Martin_Schulz/0007_to_4752.jpg
+75,"""Martin_Schulz""",3719,5308,7.827520676073618e-06,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0007.jpg,dataset/attacks/error_specific/fgsm/rr_extremes/eps_0_200/075_n005738_Martin_Schulz/0007_to_3719.jpg

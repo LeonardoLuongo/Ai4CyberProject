@@ -38,6 +38,7 @@ dependencies:
       - opencv-python
       - grad-cam
       - umap-learn
+      - plotly
 
       # Matematica Simbolica e Grafi
       - mpmath

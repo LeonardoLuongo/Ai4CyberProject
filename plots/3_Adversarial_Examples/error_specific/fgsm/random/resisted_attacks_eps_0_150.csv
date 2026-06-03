@@ -1,0 +1,6 @@
+dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
+16,"""Simon_Rattle""",3586,7514,0.000592996715568006,dataset/clean_cropped/NN1/016_n008084_Simon_Rattle/0002.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/016_n008084_Simon_Rattle/0002.jpg
+22,"""Martín_Cáceres""",8237,5321,0.00013700015551876277,dataset/clean_cropped/NN1/022_n005752_Mart_n_C_ceres/0007.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/022_n005752_Mart_n_C_ceres/0007.jpg
+75,"""Martin_Schulz""",4919,5308,0.0005091401399113238,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0006.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/075_n005738_Martin_Schulz/0006.jpg
+75,"""Martin_Schulz""",4646,5308,0.0031569211278110743,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0007.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/075_n005738_Martin_Schulz/0007.jpg
+91,"""Layne_Staley""",3585,4700,1.1734942745533772e-05,dataset/clean_cropped/NN1/091_n005050_Layne_Staley/0003.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/091_n005050_Layne_Staley/0003.jpg

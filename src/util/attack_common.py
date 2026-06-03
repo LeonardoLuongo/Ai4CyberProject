@@ -163,6 +163,7 @@ def build_nn1_art_classifier() -> tuple[object, int, str]:
         input_shape=(3, 160, 160),
         nb_classes=num_classes,
         clip_values=(0.0, 1.0),
+        preprocessing=(0.5, 0.5),
         channels_first=True,
         device_type=device_type,
     )

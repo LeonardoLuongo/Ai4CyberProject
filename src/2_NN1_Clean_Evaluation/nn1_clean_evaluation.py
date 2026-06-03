@@ -5,6 +5,8 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 from pathlib import Path
+from PIL import Image
+import numpy as np
 
 from facenet_pytorch import InceptionResnetV1, MTCNN
 
@@ -66,31 +68,29 @@ def main():
         for _, row in tqdm(df.iterrows(), total=len(df), desc="Test A/B Classification"):
             identity_id = str(row['identity_id'])
             
-            # Usiamo l'IdentityMapper per ottenere l'ID della rete (0-8630)
             true_facenet_id = mapper.get_facenet_id_by_class_id(identity_id)
-            
-            # Saltiamo le immagini Zero-Shot (Identità non presenti nel training set originale)
             if true_facenet_id == -1:
                 continue
                 
-            # 'image_path' nel tuo manifest è es: 'dataset/clean/test/000_n007126_name/0000.jpg'
             img_path = base_dir / str(row['image_path']) 
             
-            img_bgr = cv2.imread(str(img_path))
-            if img_bgr is None: 
+            # --- CARICAMENTO IDENTICO AL COLLEGA (PIL) ---
+            try:
+                img_pil = Image.open(str(img_path)).convert('RGB')
+            except Exception:
                 continue
             
-            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
             total_valid_images += 1
 
             # ------------------------------------------
-            # METODO A: NESSUN CROP (Vecchio metodo)
+            # METODO A: NESSUN CROP (Senza OpenCV)
             # ------------------------------------------
-            img_160_raw = cv2.resize(img_rgb, (160, 160))
-            x_raw = np.transpose(img_160_raw, (2, 0, 1)).astype(np.float32) / 255.0
+            # Facciamo il resize brutale usando PIL invece di cv2
+            img_160_pil = img_pil.resize((160, 160), Image.BILINEAR)
+            # Convertiamo l'immagine PIL in Numpy array solo per passarla alla rete
+            x_raw = np.transpose(np.array(img_160_pil), (2, 0, 1)).astype(np.float32) / 255.0
             t_raw = torch.tensor(x_raw).unsqueeze(0).to(device)
             
-            # Normalizzazione manuale f(x)*2 - 1 per allinearsi a FaceNet
             logits_raw = resnet(t_raw * 2 - 1)
             pred_raw = int(torch.argmax(logits_raw, dim=1).cpu().numpy()[0])
             
@@ -98,21 +98,16 @@ def main():
                 correct_no_crop += 1
 
             # ------------------------------------------
-            # METODO B: CON CROP MTCNN (TUTTE LE FACCE)
+            # METODO B: CON CROP MTCNN (Identico al collega)
             # ------------------------------------------
-            faces = mtcnn(img_rgb)
+            # Passiamo DIRETTAMENTE l'oggetto PIL a MTCNN
+            faces = mtcnn(img_pil)
             
             if faces is not None:
-                # Con keep_all=True, faces è un tensore di shape [N, 3, 160, 160] (N = numero di facce)
                 faces = faces.to(device)
-                
-                # Niente *2-1, post_process=True lo ha già fatto. Inferenza in batch per tutte le facce!
                 logits_cropped = resnet(faces) 
-                
-                # Otteniamo un array di predizioni lungo N
                 preds = torch.argmax(logits_cropped, dim=1).cpu().numpy()
                 
-                # Se l'ID reale è tra le predizioni di QUALSIASI faccia trovata, è un successo
                 if true_facenet_id in preds:
                     correct_with_crop += 1
             else:

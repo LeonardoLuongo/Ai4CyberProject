@@ -1,0 +1,3 @@
+dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
+4,"""Drake""",7449,2148,3.1702188607596327e-07,dataset/clean_cropped/NN1/004_n002295_Drake/0009.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_200/004_n002295_Drake/0009.jpg
+47,"""Pete_Rose""",2603,6444,0.0008003832190297544,dataset/clean_cropped/NN1/047_n006935_Pete_Rose/0002.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_200/047_n006935_Pete_Rose/0002.jpg
