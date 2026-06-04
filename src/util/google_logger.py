@@ -41,37 +41,42 @@ class GoogleSheetLogger:
         except Exception as e:
             print(f"[ERROR Logger] Connessione a Google Sheets fallita: {e}")
 
-    def log_biometric_metrics(self, tester, phase, attack_type, epsilon, defense_type, 
-                              accuracy, eer, far, frr, threshold, notes=""):
+    def log_attack_metrics(self, tester, attack_type, strategy, epsilon, defense_type, 
+                           robust_accuracy, targeted_asr, untargeted_asr, notes=""):
         """
         Invia i dati della Traccia 1 al foglio Google.
-        Ordine colonne:
-        A: Timestamp, B: Tester, C: Fase_Progetto, D: Tipo_Attacco, E: Epsilon,
-        F: Difesa, G: Accuracy, H: EER, I: FAR, J: FRR, K: Soglia_Ottimale, L: Note
+        Colonne: 
+        A: Timestamp, 
+        B: Tester, 
+        C: Tipo_Attacco, 
+        D: Strategia, 
+        E: Epsilon, 
+        F: Difesa, 
+        G: Robust_Accuracy, 
+        H: Targeted_ASR, 
+        I: Untargeted_ASR, 
+        J: Note
         """
         if self.sheet is None:
             print("[WARNING] Logger non connesso. Metriche non salvate su cloud.")
             return
 
         try:
-            # Formattiamo i valori float per avere 4 cifre decimali ed evitare formattazioni strane
             row = [
                 datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
                 tester,
-                phase,               # es. "Clean Evaluation", "Targeted Attack"
-                attack_type,         # es. "None", "FGSM", "PGD"
+                attack_type,         # es. "PGD"
+                strategy,            # es. "least_likely" o "untargeted"
                 f"{float(epsilon):.4f}".replace('.', ','),
-                defense_type,        # es. "None", "JPEG Compression"
-                f"{accuracy:.4%}".replace('.', ','),  # Formattazione ITA per Google Sheets
-                f"{eer:.4%}".replace('.', ','),
-                f"{far:.4%}".replace('.', ','),
-                f"{frr:.4%}".replace('.', ','),
-                f"{threshold:.4f}".replace('.', ','),
+                defense_type,        # es. "None"
+                f"{robust_accuracy:.4%}".replace('.', ','), 
+                f"{targeted_asr:.4%}".replace('.', ','),
+                f"{untargeted_asr:.4%}".replace('.', ','),
                 notes
             ]
             
             self.sheet.append_row(row, value_input_option='USER_ENTERED')
-            print(f"[INFO] Metriche loggate correttamente per il tester: {tester} [Eps: {epsilon}]")
+            print(f"[INFO Logger] Inviato a Google Sheets: {attack_type} | Eps: {epsilon} | Strat: {strategy}")
             
         except Exception as e:
             print(f"[ERROR Logger] Errore durante l'invio al foglio: {e}")

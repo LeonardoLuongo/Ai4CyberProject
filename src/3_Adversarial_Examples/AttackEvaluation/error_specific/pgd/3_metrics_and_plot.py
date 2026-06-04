@@ -17,6 +17,7 @@ from pathlib import Path
 from facenet_pytorch import InceptionResnetV1
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from util.google_logger import GoogleSheetLogger
 
 # Utilizziamo PYTHONPATH=src per gli import
 from util.plot.utils_plot_specific import (
@@ -57,6 +58,9 @@ def main():
     print(f"-> Inizializzazione NN1 globale su {device}...")
     resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
     resnet.classify = True 
+
+    # INIZIALIZZAZIONE LOGGER
+    logger = GoogleSheetLogger()
 
     for strategy in strategies:
         print(f"\n======================================================")
@@ -150,36 +154,44 @@ def main():
         # BLOCCO 2: GENERAZIONE GRAFICI GLOBALI E DISTRIBUZIONE ESITI
         # =========================================================
         print(f"\n[BLOCCO 2 - {strategy.upper()}] Generazione Grafici Globali (t-ASR, Confidence & Outcome)...")
-        asr_dict = {"PGD Targeted": []} # <--- AGGIORNATO
+        asr_dict = {"PGD Targeted": []}
         confidence_data = []
-        
-        # Dizionario per i 3 stati
         outcome_data = {"Resisted": [], "Untargeted": [], "Targeted": []}
 
         for eps in epsilons:
             df_eps = df[df['eps'] == eps]
             total = len(df_eps)
             
-            successes_df = df_eps[df_eps['adv_pred_class'] == df_eps['target_class']]
-            resisted_df = df_eps[df_eps['adv_pred_class'] == df_eps['clean_pred_class']]
+            # --- FIX MATEMATICO: Stati Mutuamente Esclusivi ---
+            # 1. Resisted
+            resisted_mask = df_eps['adv_pred_class'] == df_eps['clean_pred_class']
+            # 2. Targeted Success
+            targeted_mask = (df_eps['adv_pred_class'] == df_eps['target_class']) & (~resisted_mask)
+            # 3. Untargeted Success
+            untargeted_mask = (~resisted_mask) & (~targeted_mask)
             
-            successes = len(successes_df)
-            resisted = len(resisted_df)
-            untargeted = total - successes - resisted 
+            resisted = resisted_mask.sum()
+            successes = targeted_mask.sum()
+            untargeted = untargeted_mask.sum()
             
-            asr_dict["PGD Targeted"].append(successes / total) # <--- AGGIORNATO
+            robust_accuracy = resisted / total
+            targeted_asr = successes / total
+            untargeted_asr = untargeted / total
+
+            # Aggiorniamo i dizionari per i plot
+            asr_dict["PGD Targeted"].append(targeted_asr) 
             confidence_data.append(df_eps['target_confidence'].values)
             
-            outcome_data["Targeted"].append((successes / total) * 100)
-            outcome_data["Resisted"].append((resisted / total) * 100)
-            outcome_data["Untargeted"].append((untargeted / total) * 100)
+            outcome_data["Targeted"].append(targeted_asr * 100)
+            outcome_data["Resisted"].append(robust_accuracy * 100)
+            outcome_data["Untargeted"].append(untargeted_asr * 100)
             
             # --- ESPORTAZIONE CSV RESISTENTI ---
+            resisted_df = df_eps[resisted_mask]
             if resisted > 0:
                 eps_str_fmt = f"{eps:.3f}".replace('.', '_')
                 resisted_csv_path = output_eval_dir / f"resisted_attacks_eps_{eps_str_fmt}.csv"
                 
-                # Salviamo solo le colonne utili per l'analisi investigativa
                 resisted_export = resisted_df[[
                     'dataset_label', 'identity_name', 'target_class', 
                     'clean_pred_class', 'target_confidence', 
@@ -187,7 +199,21 @@ def main():
                 ]]
                 resisted_export.to_csv(resisted_csv_path, index=False)
 
-        # Chiamata ai grafici (Titolati PGD)
+            # --- LOGGING SU GOOGLE SHEETS ---
+            logger.log_attack_metrics(
+                tester="IlTuoNome", # <-- Ricorda di mettere il tuo nome!
+                attack_type="PGD Error-Specific",
+                strategy=strategy,
+                epsilon=eps,
+                defense_type="None",
+                robust_accuracy=robust_accuracy,
+                targeted_asr=targeted_asr,
+                untargeted_asr=untargeted_asr,
+                notes="Valutazione Clean -> Adv"
+            )
+            # ----------------------------------------
+
+        # Chiamata ai grafici
         plot_targeted_success_curve(epsilons, asr_dict, "NN1", True, str(output_eval_dir / "tasr_curve_global.png"))
         plot_target_confidence_growth(epsilons, confidence_data, f"PGD Targeted ({strategy})", True, str(output_eval_dir / "target_confidence_global.png"))
         plot_attack_outcome_distribution(epsilons, outcome_data, f"PGD Targeted ({strategy})", True, str(output_eval_dir / "outcome_distribution_stacked.png"))
