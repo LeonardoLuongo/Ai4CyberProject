@@ -1,0 +1,14 @@
+dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
+31,"""Brad_Garrett""",4432,1092,0.0009296095231547952,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0004.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/031_n001155_Brad_Garrett/0004_to_4432.jpg
+31,"""Brad_Garrett""",2451,1092,5.251205220702104e-05,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0004.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/031_n001155_Brad_Garrett/0004_to_2451.jpg
+31,"""Brad_Garrett""",5068,1092,0.0017102075507864356,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/031_n001155_Brad_Garrett/0009_to_5068.jpg
+31,"""Brad_Garrett""",2879,1092,0.0006439039134420455,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/031_n001155_Brad_Garrett/0009_to_2879.jpg
+31,"""Brad_Garrett""",315,1092,0.0014516857918351889,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/031_n001155_Brad_Garrett/0009_to_315.jpg
+31,"""Brad_Garrett""",2451,1092,0.0050473399460315704,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/031_n001155_Brad_Garrett/0009_to_2451.jpg
+42,"""Gilbert_Arenas""",4432,2879,4.350962626631372e-05,dataset/clean_cropped/NN1/042_n003085_Gilbert_Arenas/0005.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/042_n003085_Gilbert_Arenas/0005_to_4432.jpg
+42,"""Gilbert_Arenas""",2418,2879,0.012757324613630772,dataset/clean_cropped/NN1/042_n003085_Gilbert_Arenas/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/042_n003085_Gilbert_Arenas/0009_to_2418.jpg
+42,"""Gilbert_Arenas""",5068,2879,0.004996009636670351,dataset/clean_cropped/NN1/042_n003085_Gilbert_Arenas/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/042_n003085_Gilbert_Arenas/0009_to_5068.jpg
+46,"""Esperanza_Spalding""",1092,2451,0.0005701562040485442,dataset/clean_cropped/NN1/046_n002622_Esperanza_Spalding/0003.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/046_n002622_Esperanza_Spalding/0003_to_1092.jpg
+56,"""Kevin_Streelman""",2451,4432,0.00045681677875109017,dataset/clean_cropped/NN1/056_n004757_Kevin_Streelman/0001.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/056_n004757_Kevin_Streelman/0001_to_2451.jpg
+76,"""Mamta_Kulkarni""",2879,5068,0.0002441406832076609,dataset/clean_cropped/NN1/076_n005466_Mamta_Kulkarni/0002.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/076_n005466_Mamta_Kulkarni/0002_to_2879.jpg
+76,"""Mamta_Kulkarni""",315,5068,0.0002303181536262855,dataset/clean_cropped/NN1/076_n005466_Mamta_Kulkarni/0007.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_050/076_n005466_Mamta_Kulkarni/0007_to_315.jpg
