@@ -1,8 +1,14 @@
 import os
+os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "0" 
 import cv2
 import numpy as np
 import pandas as pd
 import torch
+
+# Disabilitiamo CUDNN per evitare il mismatch di librerie
+torch.backends.cudnn.enabled = False
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -30,17 +36,21 @@ from util.plot.utils_plot_shared import (
 
 def main():
     print("======================================================")
-    print(" METRICHE & PLOT: FGSM TARGETED (Error-Specific)      ")
+    print(" METRICHE & PLOT: PGD TARGETED (Error-Specific)       ")
     print("======================================================\n")
 
     # =========================================================
     # BLOCCO 0: SETUP E CARICAMENTO CSV DISTRIBUITI
     # =========================================================
     base_dir = Path(os.getcwd())
-    base_attacks_dir = base_dir / "dataset" / "attacks" / "error_specific" / "fgsm"
-    base_plots_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_specific" / "fgsm"
     
-    strategies = ["next_best", "random", "rr_lookalikes", "rr_extremes", "rr_diversity"]
+    # MODIFICA 1: Puntiamo alle cartelle PGD invece che FGSM
+    base_attacks_dir = base_dir / "dataset" / "attacks" / "error_specific" / "pgd"
+    base_plots_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_specific" / "pgd"
+    
+    # MODIFICA 2: Le strategie che hai effettivamente generato con PGD
+    # (La logica per rr_* è stata lasciata nel codice nel caso ti servisse in futuro)
+    strategies = ["next_best", "least-likely", "random"]
 
     # Inizializziamo il modello una sola volta fuori dal ciclo per risparmiare tempo e VRAM
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -131,8 +141,8 @@ def main():
                         df.loc[original_idx, 'adv_pred_class'] = a_pred
                         df.loc[original_idx, 'target_confidence'] = adv_probs[j, tgt_class]
 
-        # Salviamo il CSV valutato globale specifico per la strategia
-        evaluated_csv_path = output_eval_dir / f"fgsm_targeted_evaluated_{strategy}.csv"
+        # MODIFICA 3: Rinominato il file di output per PGD
+        evaluated_csv_path = output_eval_dir / f"pgd_targeted_evaluated_{strategy}.csv"
         df.to_csv(evaluated_csv_path, index=False)
         print(f"-> Master Data per {strategy} salvato in {evaluated_csv_path}")
 
@@ -140,10 +150,10 @@ def main():
         # BLOCCO 2: GENERAZIONE GRAFICI GLOBALI E DISTRIBUZIONE ESITI
         # =========================================================
         print(f"\n[BLOCCO 2 - {strategy.upper()}] Generazione Grafici Globali (t-ASR, Confidence & Outcome)...")
-        asr_dict = {"FGSM Targeted": []}
+        asr_dict = {"PGD Targeted": []} # <--- AGGIORNATO
         confidence_data = []
         
-        # NUOVO: Dizionario per i 3 stati
+        # Dizionario per i 3 stati
         outcome_data = {"Resisted": [], "Untargeted": [], "Targeted": []}
 
         for eps in epsilons:
@@ -157,7 +167,7 @@ def main():
             resisted = len(resisted_df)
             untargeted = total - successes - resisted 
             
-            asr_dict["FGSM Targeted"].append(successes / total)
+            asr_dict["PGD Targeted"].append(successes / total) # <--- AGGIORNATO
             confidence_data.append(df_eps['target_confidence'].values)
             
             outcome_data["Targeted"].append((successes / total) * 100)
@@ -177,10 +187,10 @@ def main():
                 ]]
                 resisted_export.to_csv(resisted_csv_path, index=False)
 
-        # Chiamata ai grafici appena aggiornati (stamperanno le percentuali!)
+        # Chiamata ai grafici (Titolati PGD)
         plot_targeted_success_curve(epsilons, asr_dict, "NN1", True, str(output_eval_dir / "tasr_curve_global.png"))
-        plot_target_confidence_growth(epsilons, confidence_data, f"FGSM Targeted ({strategy})", True, str(output_eval_dir / "target_confidence_global.png"))
-        plot_attack_outcome_distribution(epsilons, outcome_data, f"FGSM Targeted ({strategy})", True, str(output_eval_dir / "outcome_distribution_stacked.png"))
+        plot_target_confidence_growth(epsilons, confidence_data, f"PGD Targeted ({strategy})", True, str(output_eval_dir / "target_confidence_global.png"))
+        plot_attack_outcome_distribution(epsilons, outcome_data, f"PGD Targeted ({strategy})", True, str(output_eval_dir / "outcome_distribution_stacked.png"))
 
         # =========================================================
         # BLOCCO 3: PROGRESSION SHOWCASE (Impatto visivo per Epsilon)
@@ -199,15 +209,18 @@ def main():
             a_rgb = cv2.cvtColor(a_bgr, cv2.COLOR_BGR2RGB)
 
             eps_str_fmt = f"{eps:.3f}".replace('.', '_')
+            
             plot_adversarial_showcase(
                 c_rgb, a_rgb, 
-                f"Orig: {sample['identity_name']}", f"Pred: ID {sample['adv_pred_class']}", 
+                f"ID {int(sample['clean_pred_class'])}", 
+                f"ID {int(sample['adv_pred_class'])}", 
                 True, str(progression_dir / f"showcase_eps_{eps_str_fmt}.png")
             )
+            
             plot_frequency_spectrum(c_rgb, a_rgb, True, str(progression_dir / f"spectrum_eps_{eps_str_fmt}.png"))
 
         # =========================================================
-        # BLOCCO 4: MATRICI (SEPARAZIONE LOGICA TRA RR E NEXT_BEST)
+        # BLOCCO 4: MATRICI 
         # =========================================================
         PIVOT_EPS = 0.10
         df['eps_rounded'] = df['eps'].round(5) 
@@ -237,19 +250,13 @@ def main():
                             if not attempts.empty:
                                 matrix[i, j] = attempts['success'].mean() * 100
                 
-                title_map = {
-                    "rr_lookalikes": "Impersonation Matrix: The Lookalikes (Proximity)",
-                    "rr_extremes": "Impersonation Matrix: The Extremes (Strong vs Weak)",
-                    "rr_diversity": "Impersonation Matrix: Maximum Diversity (K-Means)"
-                }
-                
                 plot_source_target_heatmap(matrix, rr_identities, rr_identities, True, str(output_eval_dir / f"{strategy}_confusion_matrix.png"))
                 
                 # Per la XAI prenderemo il primo e l'ultimo di questa lista per fare i casi studio
                 weakest_10 = rr_identities
                 strongest_10 = rr_identities[::-1] # Ordine inverso
 
-            # --- LOGICA 2: NEXT_BEST / RANDOM (Matrici Data-Driven) ---
+            # --- LOGICA 2: NEXT_BEST / LEAST_LIKELY / RANDOM (Matrici Data-Driven) ---
             else:
                 source_asr = df_pivot.groupby('identity_name')['success'].mean() * 100
                 weakest_10 = source_asr.sort_values(ascending=False).head(10).index.tolist()
@@ -317,7 +324,6 @@ def main():
                 clean_cam = cam(input_tensor=t_clean, targets=[ClassifierOutputTarget(sample['clean_pred_class'])])[0, :]
                 adv_cam = cam(input_tensor=t_adv, targets=[ClassifierOutputTarget(sample['adv_pred_class'])])[0, :]
                 
-                # Aggiungiamo l'informazione eps e classe nel plot di util_plot_shared (assumendo accetti titolo custom, altrimenti lo stampa standard)
                 plot_gradcam_shift(c_rgb, a_rgb, clean_cam, adv_cam, True, str(case_dir / "1_attention_shift.png"))
                 
                 # --- UMAP (Intero Cluster) ---
@@ -352,12 +358,10 @@ def main():
                 adv_target_names = []
                 adv_actual_pred_names = []
                 
-                # Aggiungiamo un check robusto per trovare i nomi veri o usare i codici di classe
                 for _, row in sample_df.iterrows():
                     tgt_id = row['target_class']
                     pred_id = row['adv_pred_class']
                     
-                    # Cerca in tutto il df_clean se c'è un'immagine che la rete ha originariamente predetto come tgt_id
                     t_name_df = df_unique_clean[df_unique_clean['clean_pred_class'] == tgt_id]
                     p_name_df = df_unique_clean[df_unique_clean['clean_pred_class'] == pred_id]
                     
@@ -367,7 +371,7 @@ def main():
                     adv_target_names.append(t_str)
                     adv_actual_pred_names.append(p_str)
                 
-                # Logica per l'Area Rossa Target (Solo se un bersaglio è comune e abbiamo la foto)
+                # Logica per l'Area Rossa Target 
                 tgt_clean_emb = None
                 unique_targets = sample_df['target_class'].unique()
                 if len(unique_targets) == 1:
@@ -383,13 +387,12 @@ def main():
                         resnet.classify = True
                         tgt_clean_emb = np.array(tgt_clean_emb)
                 
-                # Titolo customizzato per UMAP (Passando il nome per includere l'epsilon)
                 custom_title = f'"{identity_name}" attacked with \u03B5={PIVOT_EPS:.3f}'
                 
                 plot_latent_trajectory(
                     np.array(bg_emb), bg_labels,
                     np.array(src_clean_emb), np.array(src_adv_emb),
-                    src_label_name=custom_title,  # <--- INSERIMENTO EPSILON NEL TITOLO
+                    src_label_name=custom_title, 
                     adv_success_flags=adv_success_flags,
                     adv_target_names=adv_target_names,
                     adv_actual_pred_names=adv_actual_pred_names,
@@ -409,37 +412,32 @@ def main():
                     c_embs, c_lbls = [], []
                     a_embs, a_flags = [], []
                     a_src_lbls = [] 
-                    a_tgt_lbls = [] # <--- NUOVO: Raccogliamo il target per il pop-up
+                    a_tgt_lbls = [] 
 
                     resnet.classify = False
                     with torch.no_grad():
-                        # 1. Estraiamo Clean (I 10 Continenti)
                         for _, row in df_clean_rr.iterrows():
                             img = np.transpose(cv2.cvtColor(cv2.resize(cv2.imread(str(base_dir / row['source_image_path'])), (160, 160)), cv2.COLOR_BGR2RGB), (2, 0, 1)).astype(np.float32) / 255.0
                             c_embs.append(resnet(torch.tensor(np.expand_dims(img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
                             c_lbls.append(row['identity_name'])
                             
-                        # 2. Estraiamo gli Attacchi a eps=0.10 (Le X e O)
                         for _, row in df_010.iterrows():
-                            # Legge e converte in RGB (niente resize, le avversarie sono già 160x160)
                             a_rgb = cv2.cvtColor(cv2.imread(str(base_dir / row['adversarial_image_path'])), cv2.COLOR_BGR2RGB)
                             img = np.transpose(a_rgb, (2, 0, 1)).astype(np.float32) / 255.0
                             
                             a_embs.append(resnet(torch.tensor(np.expand_dims(img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
                             a_flags.append(row['adv_pred_class'] == row['target_class'])
-                            a_src_lbls.append(row['identity_name']) # <--- NUOVO: Salviamo da chi proviene l'attacco
-
-                            # Assumo che 'target_class' sia l'ID o il nome, adattalo se nel dataframe si chiama in un altro modo
+                            a_src_lbls.append(row['identity_name']) 
                             a_tgt_lbls.append(str(row['target_class'])) 
                             
                     resnet.classify = True
                     
                     explain_dir.mkdir(exist_ok=True)
-                    plot_round_robin_plotly_grouped( # <--- Chiamiamo la nuova funzione
+                    plot_round_robin_plotly_grouped( 
                         np.array(c_embs), np.array(c_lbls), 
                         np.array(a_embs), np.array(a_flags), 
                         np.array(a_src_lbls), np.array(a_tgt_lbls),
-                        str(explain_dir / f"round_robin_umap_{strategy}.html") # Salviamo come .html
+                        str(explain_dir / f"round_robin_umap_{strategy}.html") 
                     )
                 else:
                     print(" -> [SKIP] Dati insufficienti a eps 0.10")

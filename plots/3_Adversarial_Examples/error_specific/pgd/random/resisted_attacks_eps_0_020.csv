@@ -1,0 +1,5 @@
+dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
+16,"""Simon_Rattle""",5999,7514,0.010152838192880154,dataset/clean_cropped/NN1/016_n008084_Simon_Rattle/0007.jpg,dataset/attacks/error_specific/pgd/random/eps_0_020/016_n008084_Simon_Rattle/0007.jpg
+42,"""Gilbert_Arenas""",7268,2879,0.019252870231866837,dataset/clean_cropped/NN1/042_n003085_Gilbert_Arenas/0009.jpg,dataset/attacks/error_specific/pgd/random/eps_0_020/042_n003085_Gilbert_Arenas/0009.jpg
+73,"""Jamie_Soward""",8479,3540,0.061114583164453506,dataset/clean_cropped/NN1/073_n003790_Jamie_Soward/0007.jpg,dataset/attacks/error_specific/pgd/random/eps_0_020/073_n003790_Jamie_Soward/0007.jpg
+78,"""Leymah_Gbowee""",734,4787,0.01043675933033228,dataset/clean_cropped/NN1/078_n005152_Leymah_Gbowee/0005.jpg,dataset/attacks/error_specific/pgd/random/eps_0_020/078_n005152_Leymah_Gbowee/0005.jpg

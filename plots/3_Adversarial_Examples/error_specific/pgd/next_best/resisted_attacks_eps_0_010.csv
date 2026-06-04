@@ -1,0 +1,6 @@
+dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
+12,"""Brandon_Roy""",1676,1676,0.9458015561103821,dataset/clean_cropped/NN1/012_n001173_Brandon_Roy/0007.jpg,dataset/attacks/error_specific/pgd/next_best/eps_0_010/012_n001173_Brandon_Roy/0007.jpg
+73,"""Jamie_Soward""",3511,3511,0.9917137622833252,dataset/clean_cropped/NN1/073_n003790_Jamie_Soward/0008.jpg,dataset/attacks/error_specific/pgd/next_best/eps_0_010/073_n003790_Jamie_Soward/0008.jpg
+75,"""Martin_Schulz""",2818,5308,0.25871869921684265,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0005.jpg,dataset/attacks/error_specific/pgd/next_best/eps_0_010/075_n005738_Martin_Schulz/0005.jpg
+75,"""Martin_Schulz""",4505,5308,0.2331475019454956,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0007.jpg,dataset/attacks/error_specific/pgd/next_best/eps_0_010/075_n005738_Martin_Schulz/0007.jpg
+78,"""Leymah_Gbowee""",2633,4787,0.3527514934539795,dataset/clean_cropped/NN1/078_n005152_Leymah_Gbowee/0005.jpg,dataset/attacks/error_specific/pgd/next_best/eps_0_010/078_n005152_Leymah_Gbowee/0005.jpg
