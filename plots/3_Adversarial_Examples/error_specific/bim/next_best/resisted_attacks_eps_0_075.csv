@@ -1,0 +1,7 @@
+dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
+0,"""Samantha_Ruth_Prabhu""",1168,1168,0.998788058757782,dataset/clean_cropped/NN1/000_n007726_Samantha_Ruth_Prabhu/0001.jpg,dataset/attacks/error_specific/bim/next_best/eps_0_075/000_n007726_Samantha_Ruth_Prabhu/0001.jpg
+12,"""Brandon_Roy""",1676,1676,0.9945776462554932,dataset/clean_cropped/NN1/012_n001173_Brandon_Roy/0007.jpg,dataset/attacks/error_specific/bim/next_best/eps_0_075/012_n001173_Brandon_Roy/0007.jpg
+13,"""Sean_Avery""",4131,4131,0.9848624467849731,dataset/clean_cropped/NN1/013_n007841_Sean_Avery/0001.jpg,dataset/attacks/error_specific/bim/next_best/eps_0_075/013_n007841_Sean_Avery/0001.jpg
+43,"""Christophe_Maé""",3737,3737,0.9926835894584656,dataset/clean_cropped/NN1/043_n001670_Christophe_Ma/0008.jpg,dataset/attacks/error_specific/bim/next_best/eps_0_075/043_n001670_Christophe_Ma/0008.jpg
+73,"""Jamie_Soward""",5538,5538,0.9874054789543152,dataset/clean_cropped/NN1/073_n003790_Jamie_Soward/0008.jpg,dataset/attacks/error_specific/bim/next_best/eps_0_075/073_n003790_Jamie_Soward/0008.jpg
+80,"""Zaza_Pachulia""",474,474,0.9992732405662537,dataset/clean_cropped/NN1/080_n009163_Zaza_Pachulia/0005.jpg,dataset/attacks/error_specific/bim/next_best/eps_0_075/080_n009163_Zaza_Pachulia/0005.jpg
