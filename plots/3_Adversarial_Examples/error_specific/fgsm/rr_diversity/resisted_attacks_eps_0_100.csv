@@ -1,9 +1,0 @@
-dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-31,"""Brad_Garrett""",2451,1092,7.275832467712462e-05,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0004.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_100/031_n001155_Brad_Garrett/0004_to_2451.jpg
-31,"""Brad_Garrett""",5068,1092,0.002070136833935976,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_100/031_n001155_Brad_Garrett/0009_to_5068.jpg
-31,"""Brad_Garrett""",2879,1092,0.00013023822975810617,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_100/031_n001155_Brad_Garrett/0009_to_2879.jpg
-31,"""Brad_Garrett""",315,1092,0.0004759932344313711,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_100/031_n001155_Brad_Garrett/0009_to_315.jpg
-42,"""Gilbert_Arenas""",2418,2879,0.012250961735844612,dataset/clean_cropped/NN1/042_n003085_Gilbert_Arenas/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_100/042_n003085_Gilbert_Arenas/0009_to_2418.jpg
-42,"""Gilbert_Arenas""",5068,2879,0.0024758554063737392,dataset/clean_cropped/NN1/042_n003085_Gilbert_Arenas/0009.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_100/042_n003085_Gilbert_Arenas/0009_to_5068.jpg
-46,"""Esperanza_Spalding""",6483,2451,0.0072989086620509624,dataset/clean_cropped/NN1/046_n002622_Esperanza_Spalding/0008.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_100/046_n002622_Esperanza_Spalding/0008_to_6483.jpg
-76,"""Mamta_Kulkarni""",2879,5068,6.875619146740064e-05,dataset/clean_cropped/NN1/076_n005466_Mamta_Kulkarni/0002.jpg,dataset/attacks/error_specific/fgsm/rr_diversity/eps_0_100/076_n005466_Mamta_Kulkarni/0002_to_2879.jpg

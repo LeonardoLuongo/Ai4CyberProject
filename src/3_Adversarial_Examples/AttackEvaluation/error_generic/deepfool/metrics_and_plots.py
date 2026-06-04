@@ -13,6 +13,7 @@ from util.plot.utils_plot_shared import (
     plot_adversarial_showcase,
     plot_frequency_spectrum,
 )
+from util.google_logger import GoogleSheetLogger 
 
 def main():
     print("======================================================")
@@ -40,6 +41,9 @@ def main():
 
     # Il file contiene già: clean_pred_class, adv_pred_class, clean_confidence, adv_confidence
 
+    # --- INIZIALIZZAZIONE LOGGER ---
+    logger = GoogleSheetLogger() 
+
     # =========================================================
     # BLOCCO 2: GENERAZIONE CURVE DI VALUTAZIONE
     # =========================================================
@@ -61,6 +65,23 @@ def main():
         total_resisted = len(df[resisted_budget | resisted_attack])
         robust_accuracy = total_resisted / total_images
         
+        # --- LOGGING SU GOOGLE SHEETS ---
+        try:
+            logger.log_attack_metrics(
+                tester="IlTuoNome",  # <--- Ricordati di inserire il tuo nome!
+                attack_type="DeepFool Error-Generic",
+                strategy="Untargeted",
+                epsilon=eps,
+                defense_type="None",
+                robust_accuracy=robust_accuracy,
+                targeted_asr=0.0, 
+                untargeted_asr=1.0 - robust_accuracy, 
+                notes="Valutazione retroattiva su L-inf limit"
+            )
+        except Exception as e:
+            print(f"[WARNING] Errore Google Logger: {e}")
+        # ----------------------------------------
+
         asr_dict["DeepFool Untargeted"].append(robust_accuracy)
         
         # Raccogliamo le confidenze. Se sfora il budget, usiamo l'immagine originale

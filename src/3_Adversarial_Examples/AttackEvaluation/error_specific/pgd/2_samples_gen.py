@@ -33,13 +33,13 @@ from util.basic_img.metrics import calculate_linf
 from util.attack_error_specific_utils import select_target_label, get_one_hot_target
 
 # =========================================================================
-# ⚙️ CONFIGURAZIONE PARAMETRI GLOBALI ⚙️
+# CONFIGURAZIONE PARAMETRI GLOBALI 
 # =========================================================================
 # Parametri PGD
 MAX_ITER  = 10     
 STEP_MULT = 1.5    
 NUM_INIT  = 1      
-BATCH_SIZE = 64    # <--- AUMENTATO A 64 PER MASSIMIZZARE LA GPU
+BATCH_SIZE = 64   
 
 # Vettori di Esplorazione
 EPSILONS = [0.01, 0.02, 0.03, 0.04, 0.05, 0.10]
