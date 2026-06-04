@@ -1,0 +1,48 @@
+REPORT SCOUTING DEEPFOOL (ART WRAPPER)
+Campioni testati: 915
+Budget Massimo L_inf: 0.1
+
+
+==================================================
+Inizio test per OVERSHOOT = 0.25
+==================================================
+
+Generazione DeepFool con max_iter=5, epsilon (overshoot)=0.25, nb_grads=3...
+   Linf stats: min=0.0002, mean=0.0235, median=0.0202, p95=0.0532, max=0.1134
+   Within budget (<= 0.1): 914/915 (99.89%)
+   Successful attacks within budget: 914/915 (99.89%)
+-> Risultato: Robust Accuracy (per eps <= 0.1) = 0.11%
+
+Generazione DeepFool con max_iter=20, epsilon (overshoot)=0.25, nb_grads=3...
+   Linf stats: min=0.0002, mean=0.0235, median=0.0202, p95=0.0532, max=0.1134
+   Within budget (<= 0.1): 914/915 (99.89%)
+   Successful attacks within budget: 913/915 (99.78%)
+-> Risultato: Robust Accuracy (per eps <= 0.1) = 0.22%
+
+Generazione DeepFool con max_iter=40, epsilon (overshoot)=0.25, nb_grads=3...
+   Linf stats: min=0.0002, mean=0.0235, median=0.0202, p95=0.0532, max=0.1135
+   Within budget (<= 0.1): 914/915 (99.89%)
+   Successful attacks within budget: 913/915 (99.78%)
+-> Risultato: Robust Accuracy (per eps <= 0.1) = 0.22%
+
+==================================================
+Inizio test per OVERSHOOT = 0.3
+==================================================
+
+Generazione DeepFool con max_iter=5, epsilon (overshoot)=0.3, nb_grads=3...
+   Linf stats: min=0.0003, mean=0.0243, median=0.0210, p95=0.0552, max=0.1166
+   Within budget (<= 0.1): 913/915 (99.78%)
+   Successful attacks within budget: 910/915 (99.45%)
+-> Risultato: Robust Accuracy (per eps <= 0.1) = 0.55%
+
+Generazione DeepFool con max_iter=20, epsilon (overshoot)=0.3, nb_grads=3...
+   Linf stats: min=0.0003, mean=0.0243, median=0.0210, p95=0.0551, max=0.1166
+   Within budget (<= 0.1): 913/915 (99.78%)
+   Successful attacks within budget: 912/915 (99.67%)
+-> Risultato: Robust Accuracy (per eps <= 0.1) = 0.33%
+
+Generazione DeepFool con max_iter=40, epsilon (overshoot)=0.3, nb_grads=3...
+   Linf stats: min=0.0003, mean=0.0243, median=0.0210, p95=0.0551, max=0.1166
+   Within budget (<= 0.1): 913/915 (99.78%)
+   Successful attacks within budget: 912/915 (99.67%)
+-> Risultato: Robust Accuracy (per eps <= 0.1) = 0.33%

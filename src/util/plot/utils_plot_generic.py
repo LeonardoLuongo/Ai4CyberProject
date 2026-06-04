@@ -27,29 +27,44 @@ def plot_security_evaluation_curves(epsilons: list,
     Genera la Security Evaluation Curve ufficiale (Accuratezza vs Epsilon).
     """
     plt.figure(figsize=(10, 6))
+    ax = plt.gca()
     colors = sns.color_palette("Set1", n_colors=len(accuracies_dict))
     
-    is_fraction = any(max(acc) <= 1.0 for acc in accuracies_dict.values())
+    # Check per non far crasciare il moltiplicatore se la lista è vuota
+    is_fraction = any(max(acc) <= 1.0 for acc in accuracies_dict.values() if len(acc) > 0)
     multiplier = 100.0 if is_fraction else 1.0
 
     for idx, (attack_name, acc_list) in enumerate(accuracies_dict.items()):
+        if not acc_list: continue # Sicurezza se lista vuota
+        
         acc_percent = [a * multiplier for a in acc_list]
-        plt.plot(epsilons, acc_percent, marker='o', linewidth=2.5, markersize=8, 
-                 color=colors[idx], label=attack_name)
+        ax.plot(epsilons, acc_percent, marker='o', linewidth=2.5, markersize=8, 
+                color=colors[idx], label=attack_name)
+                 
+        # Aggiunta dei numerini sopra ogni punto
+        for x, y in zip(epsilons, acc_percent):
+            ax.annotate(f"{y:.1f}%", (x, y), textcoords="offset points", xytext=(0, 10), 
+                        ha='center', fontsize=9, fontweight='bold', color=colors[idx])
 
     # Linea tratteggiata per la baseline
-    baseline_acc = list(accuracies_dict.values())[0][0] * multiplier
-    plt.axhline(y=baseline_acc, color='gray', linestyle='--', alpha=0.7, 
-                label=f'Clean Baseline ({baseline_acc:.1f}%)')
+    if list(accuracies_dict.values())[0]:
+        baseline_acc = list(accuracies_dict.values())[0][0] * multiplier
+        ax.axhline(y=baseline_acc, color='gray', linestyle='--', alpha=0.7, 
+                   label=f'Clean Baseline ({baseline_acc:.1f}%)')
 
     plt.title(f"Security Evaluation Curves - {model_name}\nError-Generic (Untargeted) Attacks", fontsize=16, pad=15)
     plt.xlabel(r"Perturbation Budget ($L_\infty$ $\epsilon$)", fontsize=14)
     plt.ylabel("Robust Accuracy (%)", fontsize=14)
-    plt.ylim(-5, 105)
+    
+    plt.ylim(-5, 115) # Alzato a 115 per non tagliare i numeri in alto
     plt.xlim(min(epsilons) - 0.005, max(epsilons) + 0.005)
     
-    plt.legend(loc='lower left', fontsize=12)
+    # Legenda spostata esternamente a destra per non coprire mai la curva
+    plt.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), fontsize=12)
+    plt.tight_layout()
+    
     save_or_show(save_flag, save_path)
+
 
 
 def plot_confidence_degradation(epsilons: list, 
