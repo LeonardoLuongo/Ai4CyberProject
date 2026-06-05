@@ -6,8 +6,8 @@ os.environ["NUMBA_NUM_THREADS"] = "1"
 os.environ["NUMBA_DISABLE_JIT"] = "0"
 os.environ["NUMBA_CACHE_DIR"] = os.path.join(os.path.expanduser("~"), ".numba_cache")
 os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "0"
-os.environ["MKL_NUM_THREADS"] = "1"       # <-- NUOVO: previene conflitti MKL
-os.environ["OPENBLAS_NUM_THREADS"] = "1"  # <-- NUOVO: per sicurezza
+os.environ["MKL_NUM_THREADS"] = "1"       
+os.environ["OPENBLAS_NUM_THREADS"] = "1"  
 
 import sys
 import numpy as np
@@ -34,6 +34,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from facenet_pytorch import InceptionResnetV1
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+
+# IMPORTIAMO IL GOOGLE LOGGER
+from util.google_logger import GoogleSheetLogger
 
 from util.plot.utils_plot_specific import (
     plot_targeted_success_curve,
@@ -89,6 +92,9 @@ def main():
     print(f"-> Inizializzazione NN1 globale su {device}...")
     resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
     resnet.classify = True 
+
+    # INIZIALIZZAZIONE DEL LOGGER
+    logger = GoogleSheetLogger()
 
     for strategy in strategies:
         print(f"\n======================================================")
@@ -169,7 +175,7 @@ def main():
         df.to_csv(evaluated_csv_path, index=False)
         print(f"-> Master Data per {strategy} salvato in {evaluated_csv_path}")
 
-        print(f"\n[BLOCCO 2 - {strategy.upper()}] Generazione Grafici Globali...")
+        print(f"\n[BLOCCO 2 - {strategy.upper()}] Generazione Grafici Globali (t-ASR, Confidence & Outcome)...")
         asr_dict = {"BIM Targeted": []}
         confidence_data = []
         outcome_data = {"Resisted": [], "Untargeted": [], "Targeted": []}
@@ -178,29 +184,71 @@ def main():
             df_eps = df[df['eps'] == eps]
             total = len(df_eps)
             
-            successes_df = df_eps[df_eps['adv_pred_class'] == df_eps['target_class']]
-            resisted_df = df_eps[df_eps['adv_pred_class'] == df_eps['clean_pred_class']]
+            # --- FIX MATEMATICO: Stati Mutuamente Esclusivi ---
+            # 1. Resisted
+            resisted_mask = df_eps['adv_pred_class'] == df_eps['clean_pred_class']
+            # 2. Targeted Success
+            targeted_mask = (df_eps['adv_pred_class'] == df_eps['target_class']) & (~resisted_mask)
+            # 3. Untargeted Success
+            untargeted_mask = (~resisted_mask) & (~targeted_mask)
             
-            successes = len(successes_df)
-            resisted = len(resisted_df)
-            untargeted = total - successes - resisted 
+            resisted = resisted_mask.sum()
+            successes = targeted_mask.sum()
+            untargeted = untargeted_mask.sum()
             
-            asr_dict["BIM Targeted"].append(successes / total)
+            robust_accuracy = resisted / total
+            targeted_asr = successes / total
+            untargeted_asr = untargeted / total
+
+            # Aggiorniamo i dizionari per i plot
+            asr_dict["BIM Targeted"].append(targeted_asr)
             confidence_data.append(df_eps['target_confidence'].values)
             
-            outcome_data["Targeted"].append((successes / total) * 100)
-            outcome_data["Resisted"].append((resisted / total) * 100)
-            outcome_data["Untargeted"].append((untargeted / total) * 100)
+            outcome_data["Targeted"].append(targeted_asr * 100)
+            outcome_data["Resisted"].append(robust_accuracy * 100)
+            outcome_data["Untargeted"].append(untargeted_asr * 100)
             
+            # --- ESPORTAZIONE CSV RESISTENTI ---
+            resisted_df = df_eps[resisted_mask]
             if resisted > 0:
                 eps_str_fmt = f"{eps:.3f}".replace('.', '_')
                 resisted_csv_path = output_eval_dir / f"resisted_attacks_eps_{eps_str_fmt}.csv"
+                
                 resisted_export = resisted_df[[
                     'dataset_label', 'identity_name', 'target_class', 
                     'clean_pred_class', 'target_confidence', 
                     'source_image_path', 'adversarial_image_path'
                 ]]
                 resisted_export.to_csv(resisted_csv_path, index=False)
+
+            # --- LOGGING SU GOOGLE SHEETS ---
+            # Fallback intelligente a seconda di come hai strutturato il logger
+            if hasattr(logger, 'log_attack_metrics'):
+                logger.log_attack_metrics(
+                    tester="Andrea",
+                    attack_type="BIM Error-Specific",
+                    strategy=strategy,
+                    epsilon=eps,
+                    defense_type="None",
+                    robust_accuracy=robust_accuracy,
+                    targeted_asr=targeted_asr,
+                    untargeted_asr=untargeted_asr,
+                    notes="Valutazione Clean -> Adv"
+                )
+            else:
+                logger.log_biometric_metrics(
+                    tester="Andrea", 
+                    phase=f"Targeted Attack ({strategy})",
+                    attack_type="BIM Error-Specific",
+                    epsilon=eps,
+                    defense_type="None",
+                    accuracy=targeted_asr, # Salviamo la Targeted ASR nella colonna principale
+                    eer=0.0,
+                    far=0.0,
+                    frr=0.0,
+                    threshold=0.0,
+                    notes=f"Untargeted: {untargeted_asr:.1%}, Resisted: {robust_accuracy:.1%}"
+                )
 
         plot_targeted_success_curve(epsilons, asr_dict, "NN1", True, str(output_eval_dir / "tasr_curve_global.png"))
         plot_target_confidence_growth(epsilons, confidence_data, f"BIM Targeted ({strategy})", True, str(output_eval_dir / "target_confidence_global.png"))
