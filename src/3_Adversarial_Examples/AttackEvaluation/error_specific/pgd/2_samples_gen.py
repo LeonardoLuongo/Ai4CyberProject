@@ -58,7 +58,7 @@ def main():
     csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
     meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
     
-    output_base_dir = base_dir / "dataset" / "attacks" / "error_specific" / "pgd"
+    output_base_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_specific" / "pgd"
     cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"
     
     if not csv_path.exists() or not meta_csv_path.exists():

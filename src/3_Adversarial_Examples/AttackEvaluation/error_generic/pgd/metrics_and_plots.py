@@ -39,7 +39,7 @@ def main():
     # BLOCCO 0: SETUP E CARICAMENTO CSV DISTRIBUITI
     # =========================================================
     base_dir = Path.cwd()
-    attacks_dir = base_dir / "dataset" / "attacks" / "error_generic" / "pgd"
+    attacks_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_generic" / "pgd"
     output_eval_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_generic" / "pgd"
     
     progression_dir = output_eval_dir / "visual_progression"
