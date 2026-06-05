@@ -45,12 +45,9 @@ def main():
     # =========================================================
     base_dir = Path(os.getcwd())
     
-    # MODIFICA 1: Puntiamo alle cartelle PGD invece che FGSM
     base_attacks_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_specific" / "pgd"
     base_plots_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_specific" / "pgd"
     
-    # MODIFICA 2: Le strategie che hai effettivamente generato con PGD
-    # (La logica per rr_* è stata lasciata nel codice nel caso ti servisse in futuro)
     strategies = ["next_best", "least-likely", "random"]
 
     # Inizializziamo il modello una sola volta fuori dal ciclo per risparmiare tempo e VRAM
@@ -162,7 +159,6 @@ def main():
             df_eps = df[df['eps'] == eps]
             total = len(df_eps)
             
-            # --- FIX MATEMATICO: Stati Mutuamente Esclusivi ---
             # 1. Resisted
             resisted_mask = df_eps['adv_pred_class'] == df_eps['clean_pred_class']
             # 2. Targeted Success
@@ -201,7 +197,7 @@ def main():
 
             # --- LOGGING SU GOOGLE SHEETS ---
             logger.log_attack_metrics(
-                tester="IlTuoNome", # <-- Ricorda di mettere il tuo nome!
+                tester="Francesco", 
                 attack_type="PGD Error-Specific",
                 strategy=strategy,
                 epsilon=eps,

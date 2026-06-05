@@ -1,2 +1,2 @@
 dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-53,"""Danniella_Westbrook""",6587,1842,0.001922069350257516,dataset/clean_cropped/NN1/053_n001960_Danniella_Westbrook/0002.jpg,dataset/attacks/error_specific/fgsm/next_best/eps_0_200/053_n001960_Danniella_Westbrook/0002.jpg
+53,"""Danniella_Westbrook""",6587,1842,0.001922069350257516,dataset/clean_cropped/NN1/053_n001960_Danniella_Westbrook/0002.jpg,dataset/attacks/NN1/error_specific/fgsm/next_best/eps_0_200/053_n001960_Danniella_Westbrook/0002.jpg

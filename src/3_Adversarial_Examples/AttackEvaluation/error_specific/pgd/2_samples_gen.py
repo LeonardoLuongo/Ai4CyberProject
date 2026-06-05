@@ -191,7 +191,7 @@ def main():
                 max_iter=MAX_ITER, 
                 num_random_init=NUM_INIT,
                 targeted=True,
-                batch_size=BATCH_SIZE, # La GPU ora respirerà a pieni polmoni
+                batch_size=BATCH_SIZE,
                 verbose=False
             )
             

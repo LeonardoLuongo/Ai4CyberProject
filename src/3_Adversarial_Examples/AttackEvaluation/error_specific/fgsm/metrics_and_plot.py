@@ -44,7 +44,7 @@ def main():
     # BLOCCO 0: SETUP E CARICAMENTO CSV DISTRIBUITI
     # =========================================================
     base_dir = Path(os.getcwd())
-    base_attacks_dir = base_dir / "dataset" / "attacks" / "error_specific" / "fgsm"
+    base_attacks_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_specific" / "fgsm"
     base_plots_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_specific" / "fgsm"
     
     strategies = ["next_best", "random", "rr_lookalikes", "rr_extremes", "rr_diversity", "least-likely"]

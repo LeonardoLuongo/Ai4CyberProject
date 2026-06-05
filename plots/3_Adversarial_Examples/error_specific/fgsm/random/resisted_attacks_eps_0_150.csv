@@ -1,8 +1,4 @@
 dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-31,"""Brad_Garrett""",7420,1092,0.00028350422508083284,dataset/clean_cropped/NN1/031_n001155_Brad_Garrett/0009.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/031_n001155_Brad_Garrett/0009.jpg
-66,"""Sümer_Tilmaç""",6265,7776,9.935928392224014e-05,dataset/clean_cropped/NN1/066_n008368_S_mer_Tilma/0004.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/066_n008368_S_mer_Tilma/0004.jpg
-75,"""Martin_Schulz""",4502,5308,0.00025641079992055893,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0005.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/075_n005738_Martin_Schulz/0005.jpg
-75,"""Martin_Schulz""",541,5308,0.00010199297685176134,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0007.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/075_n005738_Martin_Schulz/0007.jpg
-78,"""Leymah_Gbowee""",8231,4787,2.3572663394588744e-06,dataset/clean_cropped/NN1/078_n005152_Leymah_Gbowee/0007.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/078_n005152_Leymah_Gbowee/0007.jpg
-79,"""Nino_Frassica""",289,6102,1.6724912711651996e-05,dataset/clean_cropped/NN1/079_n006578_Nino_Frassica/0001.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/079_n006578_Nino_Frassica/0001.jpg
-91,"""Layne_Staley""",5599,4700,5.326736300048651e-06,dataset/clean_cropped/NN1/091_n005050_Layne_Staley/0003.jpg,dataset/attacks/error_specific/fgsm/random/eps_0_150/091_n005050_Layne_Staley/0003.jpg
+16,"""Simon_Rattle""",2176,7514,0.0006627655820921063,dataset/clean_cropped/NN1/016_n008084_Simon_Rattle/0002.jpg,dataset/attacks/NN1/error_specific/fgsm/random/eps_0_150/016_n008084_Simon_Rattle/0002.jpg
+66,"""Sümer_Tilmaç""",7184,7776,0.00017153163207694888,dataset/clean_cropped/NN1/066_n008368_S_mer_Tilma/0009.jpg,dataset/attacks/NN1/error_specific/fgsm/random/eps_0_150/066_n008368_S_mer_Tilma/0009.jpg
+91,"""Layne_Staley""",4625,4700,0.00045811926247552037,dataset/clean_cropped/NN1/091_n005050_Layne_Staley/0003.jpg,dataset/attacks/NN1/error_specific/fgsm/random/eps_0_150/091_n005050_Layne_Staley/0003.jpg
