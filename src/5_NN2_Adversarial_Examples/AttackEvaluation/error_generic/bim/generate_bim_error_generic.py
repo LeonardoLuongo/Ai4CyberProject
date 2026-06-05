@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from art.attacks.evasion import FastGradientMethod
+from art.attacks.evasion import BasicIterativeMethod
 from art.estimators.classification import PyTorchClassifier
 from facenet_pytorch import InceptionResnetV1, MTCNN
 
@@ -50,12 +50,12 @@ def save_rgb_hwc_01(image_path: Path, image_hwc_01: np.ndarray) -> None:
 
 def main():
     print("==============================================================")
-    print(" GENERATORE TRANSFERABILITY: FGSM ERROR-GENERIC NN1 -> NN2    ")
+    print(" GENERATORE TRANSFERABILITY: BIM ERROR-GENERIC NN1 -> NN2     ")
     print("==============================================================\n")
 
     base_dir = PROJECT_ROOT
     print(f"-> Project Root impostata a: {base_dir}")
-    print("-> L'attacco viene generato su NN1 a 160x160.")
+    print("-> L'attacco BIM viene generato su NN1 a 160x160.")
     print("-> NN2 NON viene usata qui: la resize a 224x224 avverra nel file di valutazione.\n")
 
     csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
@@ -68,10 +68,12 @@ def main():
         / "attacks"
         / "NN2"
         / "error_generic"
-        / "fgsm"
+        / "bim"
     )
 
-    epsilons = [0.025, 0.05, 0.075, 0.10, 0.15, 0.20]
+    epsilons = [0.025, 0.050, 0.075, 0.100, 0.15, 0.20]
+    bim_max_iter = 4
+    bim_eps_step_divisor = 24.0
     batch_size = 64
 
     if not csv_path.exists() or not meta_csv_path.exists():
@@ -121,7 +123,6 @@ def main():
             source_img_path = base_dir / str(row["image_path"])
             identity_dir_name = source_img_path.parent.name
             img_filename = source_img_path.name
-
             crop_path = cropped_nn1_dir / identity_dir_name / img_filename
 
             if crop_path.exists():
@@ -143,7 +144,6 @@ def main():
                 faces = faces.to(device)
                 logits_all = nn1(faces)
                 preds_all = torch.argmax(logits_all, dim=1).detach().cpu().numpy()
-
                 if true_facenet_id not in preds_all:
                     continue
 
@@ -151,8 +151,7 @@ def main():
                 best_face = faces[match_idx].detach().cpu().numpy()
                 x_clean_chw = np.clip((best_face + 1.0) / 2.0, 0.0, 1.0).astype(np.float32)
 
-                crop_hwc = np.transpose(x_clean_chw, (1, 2, 0))
-                save_rgb_hwc_01(crop_path, crop_hwc)
+                save_rgb_hwc_01(crop_path, np.transpose(x_clean_chw, (1, 2, 0)))
 
             row_dict = row.to_dict()
             row_dict["true_facenet_id"] = true_facenet_id
@@ -166,10 +165,10 @@ def main():
         raise RuntimeError("Nessuna immagine valida trovata per generare gli attacchi.")
 
     # =========================================================================
-    # FASE 2: FGSM SU NN1, SALVATAGGIO A 160x160
+    # FASE 2: BIM SU NN1, SALVATAGGIO A 160x160
     # =========================================================================
     print("\n==============================================================")
-    print(" AVVIO GENERAZIONE FGSM ERROR-GENERIC SU NN1")
+    print(" AVVIO GENERAZIONE BIM ERROR-GENERIC SU NN1")
     print("==============================================================")
 
     for eps in epsilons:
@@ -177,11 +176,17 @@ def main():
         eps_dir = output_base_dir / eps_str
         eps_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"\n[>>>] Generazione FGSM NN1, epsilon = {eps:.3f}")
+        eps_step = eps / bim_eps_step_divisor
+        print(
+            f"\n[>>>] Generazione BIM NN1, epsilon={eps:.3f} | "
+            f"eps_step={eps_step:.6f} | max_iter={bim_max_iter}"
+        )
 
-        attack = FastGradientMethod(
+        attack = BasicIterativeMethod(
             estimator=classifier,
             eps=eps,
+            eps_step=eps_step,
+            max_iter=bim_max_iter,
             targeted=False,
             batch_size=batch_size,
         )
@@ -226,8 +231,10 @@ def main():
 
                 eps_tracker_records.append(
                     {
-                        "attack_type": "fgsm",
+                        "attack_type": "bim",
                         "eps": eps,
+                        "eps_step": eps_step,
+                        "max_iter": bim_max_iter,
                         "targeted": False,
                         "target_strategy": "none",
                         "target_class": -1,
@@ -252,7 +259,7 @@ def main():
         pd.DataFrame(eps_tracker_records).to_csv(tracker_path, index=False)
         print(f"-> Tracker salvato in: {tracker_path}")
 
-    print("\n[OK] Generazione FGSM transferability NN1 -> NN2 completata.")
+    print("\n[OK] Generazione BIM transferability NN1 -> NN2 completata.")
     print(f"-> Output: {output_base_dir}")
     print("-> Nel file di valutazione NN2 carica queste immagini, ridimensionale a 224x224 e applica il preprocessing SENet.")
 

@@ -1,6 +1,5 @@
 import os
 
-# Windows/runtime stability knobs.
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["NUMBA_NUM_THREADS"] = "1"
@@ -80,7 +79,6 @@ def load_rgb_image(path: Path, image_size: int = IMAGE_SIZE_NN2) -> np.ndarray:
 
 
 def preprocess_rgb_for_senet(image_rgb: np.ndarray) -> np.ndarray:
-    """SENet VGGFace2 preprocessing: RGB uint8 -> BGR float32 - MEAN_BGR -> CHW."""
     image_bgr = image_rgb[:, :, ::-1].astype(np.float32)
     image_bgr -= MEAN_BGR
     return np.transpose(image_bgr, (2, 0, 1)).astype(np.float32)
@@ -88,7 +86,7 @@ def preprocess_rgb_for_senet(image_rgb: np.ndarray) -> np.ndarray:
 
 def main():
     print("================================================================")
-    print(" METRICHE & PLOT: FGSM TRANSFERABILITY NN1 -> NN2 (ERROR-GENERIC)")
+    print(" METRICHE & PLOT: BIM TRANSFERABILITY NN1 -> NN2 (ERROR-GENERIC) ")
     print("================================================================\n")
 
     base_dir = PROJECT_ROOT
@@ -100,7 +98,7 @@ def main():
         / "attacks"
         / "NN2"
         / "error_generic"
-        / "fgsm"
+        / "bim"
     )
     output_eval_dir = (
         base_dir
@@ -108,7 +106,7 @@ def main():
         / "5_NN2_Adversarial_Examples"
         / "NN2"
         / "error_generic"
-        / "fgsm"
+        / "bim"
     )
     progression_dir = output_eval_dir / "visual_progression"
 
@@ -119,7 +117,7 @@ def main():
     if not tracker_files:
         raise FileNotFoundError(
             f"Nessun tracker trovato in {attacks_dir}. "
-            "Esegui prima il generatore FGSM transferability NN1 -> NN2."
+            "Esegui prima il generatore BIM transferability NN1 -> NN2."
         )
 
     print(f"-> Trovati {len(tracker_files)} tracker. Unione in corso...")
@@ -227,7 +225,7 @@ def main():
                     df.loc[row_index, "prediction_changed_nn2"] = prediction_changed
                     df.loc[row_index, "transfer_success_nn2"] = transfer_success
 
-    evaluated_csv_path = output_eval_dir / "fgsm_transferability_nn1_to_nn2_evaluated.csv"
+    evaluated_csv_path = output_eval_dir / "bim_transferability_nn1_to_nn2_evaluated.csv"
     df.to_csv(evaluated_csv_path, index=False)
     print(f"-> Master CSV salvato in: {evaluated_csv_path}")
 
@@ -236,7 +234,7 @@ def main():
     # =========================================================
     print("\n[BLOCCO 2] Calcolo metriche e generazione grafici...")
 
-    robust_accuracy_curve = {"FGSM Transfer NN1->NN2": []}
+    robust_accuracy_curve = {"BIM Transfer NN1->NN2": []}
     confidence_data = []
     transfer_asr_values = []
     metric_rows = []
@@ -261,7 +259,7 @@ def main():
             prediction_change_rate = 0.0
             confidence_values = df_eps["adv_true_class_confidence"].values
 
-        robust_accuracy_curve["FGSM Transfer NN1->NN2"].append(robust_accuracy)
+        robust_accuracy_curve["BIM Transfer NN1->NN2"].append(robust_accuracy)
         confidence_data.append(confidence_values)
         transfer_asr_values.append(transfer_asr)
 
@@ -287,7 +285,7 @@ def main():
         if logger is not None:
             logger.log_attack_metrics(
                 tester="Andrea",
-                attack_type="FGSM Transfer NN1->NN2",
+                attack_type="BIM Transfer NN1->NN2",
                 strategy="Error-Generic Untargeted",
                 epsilon=eps,
                 defense_type="None",
@@ -302,7 +300,7 @@ def main():
                 ),
             )
 
-    metrics_csv_path = output_eval_dir / "fgsm_transferability_nn1_to_nn2_metrics.csv"
+    metrics_csv_path = output_eval_dir / "bim_transferability_nn1_to_nn2_metrics.csv"
     pd.DataFrame(metric_rows).to_csv(metrics_csv_path, index=False)
     print(f"-> CSV metriche salvato in: {metrics_csv_path}")
 
@@ -316,7 +314,7 @@ def main():
     plot_confidence_degradation(
         epsilons,
         confidence_data,
-        "FGSM Transfer NN1->NN2",
+        "BIM Transfer NN1->NN2",
         True,
         str(output_eval_dir / "confidence_degradation_transfer_nn1_to_nn2.png"),
     )
@@ -366,7 +364,7 @@ def main():
             str(progression_dir / f"spectrum_eps_{eps_str}.png"),
         )
 
-    print("\n[OK] Valutazione transferability FGSM NN1 -> NN2 completata.")
+    print("\n[OK] Valutazione transferability BIM NN1 -> NN2 completata.")
 
 
 if __name__ == "__main__":
