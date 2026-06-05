@@ -226,8 +226,10 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
                         target_class = torch.argmax(y_batch, dim=1)
                         delta_i = torch.amax(torch.abs(x_adv_batch - x_batch), dim=(1, 2, 3))
                         
-                        # Match bug di ART: pred_class != target_class vale sia per Targeted che per Untargeted
-                        success_mask = (pred_class != target_class) & (delta_i < delta_i_best) & active_const_mask
+                        if self._targeted:
+                            success_mask = (pred_class == target_class) & (delta_i < delta_i_best) & active_const_mask
+                        else:
+                            success_mask = (pred_class != target_class) & (delta_i < delta_i_best) & active_const_mask
                         
                         if success_mask.any():
                             # Salviamo i migliori successi

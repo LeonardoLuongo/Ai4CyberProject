@@ -299,7 +299,17 @@ def main():
 
     # 2B. CUSTOM FULL (ART MATCH PyTorch GPU)
     print("-> [2. CUSTOM ART-MATCH] Esecuzione replica fedele su GPU...")
-    custom_cw_full_targ = CarliniLInfMethodPyTorch(classifier=classifier, targeted=True, max_iter=1_000, learning_rate=0.01, batch_size=10, verbose=False)
+    custom_cw_full_targ = CarliniLInfMethodPyTorch(
+        classifier=classifier, 
+        targeted=True, 
+        max_iter=200,          # <-- ABBASSATO da 1000 a 200. (1000 è inutile se non converge)
+        learning_rate=0.01, 
+        batch_size=10, 
+        initial_const=1e-3,    # Standard
+        largest_const=20.0,    # Non farlo salire all'infinito
+        verbose=True           # Così vedi la barra di progresso e capisci se si blocca
+    )
+
     y_targets_np = y_target_llc.cpu().numpy()
     y_tgt_onehot = np.zeros((len(y_targets_np), 8631), dtype=np.float32)
     y_tgt_onehot[np.arange(len(y_targets_np)), y_targets_np] = 1.0
