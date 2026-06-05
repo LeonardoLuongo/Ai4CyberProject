@@ -1,3 +1,3 @@
 dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-12,"""Brandon_Roy""",1676,1676,0.99735426902771,dataset/clean_cropped/NN1/012_n001173_Brandon_Roy/0007.jpg,dataset/attacks/error_specific/pgd/next_best/eps_0_050/012_n001173_Brandon_Roy/0007.jpg
-73,"""Jamie_Soward""",3511,3511,0.9990211725234985,dataset/clean_cropped/NN1/073_n003790_Jamie_Soward/0008.jpg,dataset/attacks/error_specific/pgd/next_best/eps_0_050/073_n003790_Jamie_Soward/0008.jpg
+12,"""Brandon_Roy""",1676,1676,0.99735426902771,dataset/clean_cropped/NN1/012_n001173_Brandon_Roy/0007.jpg,dataset/attacks/NN1/error_specific/pgd/next_best/eps_0_050/012_n001173_Brandon_Roy/0007.jpg
+73,"""Jamie_Soward""",3511,3511,0.9990211725234985,dataset/clean_cropped/NN1/073_n003790_Jamie_Soward/0008.jpg,dataset/attacks/NN1/error_specific/pgd/next_best/eps_0_050/073_n003790_Jamie_Soward/0008.jpg

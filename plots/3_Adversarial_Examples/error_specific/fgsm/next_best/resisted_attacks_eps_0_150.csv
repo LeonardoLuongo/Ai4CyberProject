@@ -1,4 +1,4 @@
 dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-44,"""Nikki_Giovanni""",1346,6076,0.0004957850906066597,dataset/clean_cropped/NN1/044_n006550_Nikki_Giovanni/0009.jpg,dataset/attacks/error_specific/fgsm/next_best/eps_0_150/044_n006550_Nikki_Giovanni/0009.jpg
-53,"""Danniella_Westbrook""",6587,1842,0.06401114165782928,dataset/clean_cropped/NN1/053_n001960_Danniella_Westbrook/0002.jpg,dataset/attacks/error_specific/fgsm/next_best/eps_0_150/053_n001960_Danniella_Westbrook/0002.jpg
-91,"""Layne_Staley""",2525,4700,0.019406476989388466,dataset/clean_cropped/NN1/091_n005050_Layne_Staley/0003.jpg,dataset/attacks/error_specific/fgsm/next_best/eps_0_150/091_n005050_Layne_Staley/0003.jpg
+44,"""Nikki_Giovanni""",1346,6076,0.0004957850906066597,dataset/clean_cropped/NN1/044_n006550_Nikki_Giovanni/0009.jpg,dataset/attacks/NN1/error_specific/fgsm/next_best/eps_0_150/044_n006550_Nikki_Giovanni/0009.jpg
+53,"""Danniella_Westbrook""",6587,1842,0.06401114165782928,dataset/clean_cropped/NN1/053_n001960_Danniella_Westbrook/0002.jpg,dataset/attacks/NN1/error_specific/fgsm/next_best/eps_0_150/053_n001960_Danniella_Westbrook/0002.jpg
+91,"""Layne_Staley""",2525,4700,0.019406476989388466,dataset/clean_cropped/NN1/091_n005050_Layne_Staley/0003.jpg,dataset/attacks/NN1/error_specific/fgsm/next_best/eps_0_150/091_n005050_Layne_Staley/0003.jpg

@@ -1,8 +1,4 @@
-"""Script per il tuning degli iperparametri di PGD TARGETED (Distribuzione a 3 stati).
-
-Coerente con lo script BIM del collega: traccia la distribuzione a 3 stati 
-(Resisted, Untargeted Success, Targeted Success) valutando l'evoluzione
-dell'attacco all'aumentare dell'Epsilon.
+"""Script per il tuning degli iperparametri di PGD TARGETED.
 """
 
 from __future__ import annotations
@@ -52,7 +48,7 @@ def main() -> int:
     BEST_MAX_ITER = 10
     NUM_INIT = 1
     
-    # Variabiliamo Epsilon e Moltiplicatore per il grafico coerente col collega
+    # Variabiliamo Epsilon e Moltiplicatore 
     epsilons = [0.01, 0.02, 0.03, 0.04, 0.05]
     step_multipliers = [1.0, 1.5, 2.0]  
     
@@ -79,7 +75,7 @@ def main() -> int:
     
     valid_faces = []
     hardest_targets = []
-    true_classes = [] # FONDAMENTALE PER CALCOLARE I 3 STATI
+    true_classes = [] 
     
     for sample in samples:
         true_id = mapper.get_facenet_id_by_class_id(sample.identity_id)
@@ -191,7 +187,6 @@ def main() -> int:
     num_mults = len(step_multipliers)
     fig, axes = plt.subplots(1, num_mults, figsize=(6 * num_mults, 7), sharey=True)
     
-    # Colori allineati al grafico BIM del collega
     color_resisted = 'forestgreen'
     color_untargeted = 'gold'
     color_targeted = 'firebrick'

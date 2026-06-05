@@ -1,9 +1,4 @@
-"""Script unificato per il tuning degli iperparametri di PGD (Error-Specific).
-
-Integra MTCNN per il crop iniziale e seleziona SOLO i sample classificati
-correttamente. Per ogni sample calcola il target 'least-likely' usando
-le utils condivise e tenta un attacco mirato. 
-Ottimizza eps_step e num_random_init misurando il t-ASR.
+"""Script per il tuning degli iperparametri di PGD (Error-Specific).
 """
 
 from __future__ import annotations
@@ -24,7 +19,7 @@ torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 # =========================================================================
 
-# Setup Path (coerente con i vostri script)
+# Setup Path 
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -48,15 +43,13 @@ def main() -> int:
     input_dir = base_dir / "dataset" / "clean" / "test"
     meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
     
-    batch_size = 64  # Abbassato leggermente rispetto all'untargeted per la memoria extra
-    max_images = 300 # Cap suggerito per lo scouting (least-likely è il target più tosto)
+    batch_size = 64 
+    max_images = 300 
 
-    # -> N.B. Per attacchi targeted, BEST_MAX_ITER spesso richiede valori più alti 
-    # rispetto al generic (es. 10 o 20) per forzare l'immagine verso il target.
     BEST_MAX_ITER = 10 
     
     # VARIABILI DA ESPLORARE PER PGD SPECIFIC
-    epsilons = [0.01, 0.02, 0.03, 0.04, 0.05] # Valori solitamente più alti per il targeted
+    epsilons = [0.01, 0.02, 0.03, 0.04, 0.05] 
     step_multipliers = [1.0, 1.5, 2.0]  
     num_random_inits = [1, 3]        
     
@@ -165,14 +158,13 @@ def main() -> int:
             for num_init in num_random_inits:
                 print(f" -> Generazione: eps_step={eps_step:.4f} (mult={step_mult}), init={num_init}...")
                 
-                # Inizializziamo PGD in modalità TARGETED
                 attack = ProjectedGradientDescent(
                     estimator=classifier, 
                     eps=eps, 
                     eps_step=eps_step, 
                     max_iter=BEST_MAX_ITER, 
                     num_random_init=num_init,
-                    targeted=True,          # <--- FONDAMENTALE
+                    targeted=True,         
                     batch_size=batch_size,
                     verbose=False
                 )
@@ -185,8 +177,6 @@ def main() -> int:
                     batch_x = X_valid[start_idx:end_idx]
                     batch_y_tgt = Y_targets[start_idx:end_idx]
                     
-                    # INTEGRAZIONE COLLEGHI: get_one_hot_target restituisce (1, num_classes).
-                    # Dobbiamo concatenarli lungo l'asse 0 per formare il batch corretto: (BATCH, num_classes)
                     batch_y_one_hot = np.concatenate([
                         get_one_hot_target(tgt, num_classes=mapper.get_num_training_classes()) 
                         for tgt in batch_y_tgt

@@ -36,7 +36,7 @@ def main():
     base_dir = Path(os.getcwd())
     csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
     meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
-    output_base_dir = base_dir / "dataset" / "attacks" / "error_specific" / "fgsm"
+    output_base_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_specific" / "fgsm"
     
     # NUOVA CARTELLA: Per salvare le immagini pulite già ritagliate
     cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"

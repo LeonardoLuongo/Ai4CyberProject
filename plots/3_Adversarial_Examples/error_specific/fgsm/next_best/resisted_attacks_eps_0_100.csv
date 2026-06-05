@@ -1,2 +1,2 @@
 dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-16,"""Simon_Rattle""",1038,7514,0.022198399528861046,dataset/clean_cropped/NN1/016_n008084_Simon_Rattle/0001.jpg,dataset/attacks/error_specific/fgsm/next_best/eps_0_100/016_n008084_Simon_Rattle/0001.jpg
+16,"""Simon_Rattle""",1038,7514,0.022198399528861046,dataset/clean_cropped/NN1/016_n008084_Simon_Rattle/0001.jpg,dataset/attacks/NN1/error_specific/fgsm/next_best/eps_0_100/016_n008084_Simon_Rattle/0001.jpg

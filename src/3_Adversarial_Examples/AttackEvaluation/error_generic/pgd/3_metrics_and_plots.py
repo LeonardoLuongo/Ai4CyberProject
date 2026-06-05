@@ -19,7 +19,6 @@ from tqdm import tqdm
 from pathlib import Path
 from facenet_pytorch import InceptionResnetV1
 
-# Utilizziamo PYTHONPATH=src per gli import
 from util.plot.utils_plot_generic import (
     plot_security_evaluation_curves,
     plot_confidence_degradation,
@@ -75,7 +74,7 @@ def main():
     resnet.classify = True 
 
     # =========================================================
-    # BLOCCO 1: INFERENZA IN BATCH (Per calcolare predizioni e confidenze)
+    # BLOCCO 1: INFERENZA IN BATCH 
     # =========================================================
     batch_size = 64 
     print(f"\n[BLOCCO 1] Inferenza delle immagini avversarie e originali...")
@@ -185,7 +184,6 @@ def main():
 
             eps_str_fmt = f"{eps:.3f}".replace('.', '_')
             
-            # --- FIX NOMI ---
             plot_adversarial_showcase(
                 c_rgb, a_rgb, 
                 f"ID {int(sample['clean_pred_class'])}", 

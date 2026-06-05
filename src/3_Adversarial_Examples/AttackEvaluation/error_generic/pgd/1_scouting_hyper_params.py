@@ -1,8 +1,4 @@
-"""Script unificato per il tuning degli iperparametri di PGD.
-
-Integra MTCNN per il crop iniziale (scartando i sample misclassificati)
-e genera immagini avversarie mantenendo fisso max_iter (scoperto da BIM).
-Esplora eps_step (calcolato dinamicamente) e num_random_init.
+"""Script per il tuning degli iperparametri di PGD.
 """
 
 from __future__ import annotations
@@ -48,7 +44,7 @@ def main() -> int:
     batch_size = 128  
     max_images = None  # Immagini totali da analizzare prima del filtro
 
-    # --> VALORE DA MODIFICARE A MANO IN BASE AI RISULTATI DI BIM <--
+   
     BEST_MAX_ITER = 4 
     
     # VARIABILI DA ESPLORARE PER PGD
@@ -137,7 +133,7 @@ def main() -> int:
     Y_valid = np.array(valid_ground_truths)
 
     # =========================================================================
-    # FASE 2: GRID SEARCH AVVERSARIO PGD - LOGICA COLLEGA 2
+    # FASE 2: GRID SEARCH AVVERSARIO PGD 
     # =========================================================================
     results_accuracy = {
         eps: {mult: [] for mult in step_multipliers} 
@@ -194,7 +190,7 @@ def main() -> int:
                 print(f"-> Risultato: Robust Accuracy = {accuracy * 100:.2f}%")
 
     # =========================================================================
-    # FASE 3: GENERAZIONE DEL GRAFICO (Versione Definitiva)
+    # FASE 3: GENERAZIONE DEL GRAFICO 
     # =========================================================================
     print("\n--- Generazione del Grafico in corso ---")
     plt.figure(figsize=(10, 6))
@@ -225,7 +221,6 @@ def main() -> int:
     plt.ylim([-0.05, 1.05])
     plt.grid(True, linestyle='--', alpha=0.7)
 
-    # Legenda spostata esternamente per un'estetica più pulita
     plt.legend(title='Epsilon & Step Multiplier', bbox_to_anchor=(1.05, 1), loc='upper left')
 
     save_path = plots_dir / "pgd_hyperparameter_tuning_cropped.png"
