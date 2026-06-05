@@ -10,6 +10,8 @@ import torch.nn.functional as F
 from pathlib import Path
 from PIL import Image
 
+from torch.profiler import profile, record_function, ProfilerActivity
+
 from facenet_pytorch import InceptionResnetV1, MTCNN
 from art.estimators.classification import PyTorchClassifier
 from art.attacks.evasion import CarliniLInfMethod
@@ -17,6 +19,7 @@ from art.attacks.evasion import CarliniLInfMethod
 from util.identity_mapper import IdentityMapper
 from util.attack_error_specific_utils import get_one_hot_target
 from util.cw_benchmarks.cw_pytorch import CarliniLInfMethodPyTorch
+
 # =====================================================================
 # LA TUA CLASSE OTTIMIZZATA
 # =====================================================================
@@ -297,16 +300,46 @@ def main():
 
     art_targ_succ, art_targ_mean, art_targ_max = evaluate_batch(wrapped_model, x_clean, torch.tensor(x_adv_art_t_np).to(device), y_true, y_target_llc)
 
-    # 2B. CUSTOM FULL (ART MATCH PyTorch GPU)
-    print("-> [2. CUSTOM ART-MATCH] Esecuzione replica fedele su GPU...")
-    custom_cw_full_targ = CarliniLInfMethodPyTorch(classifier=classifier, targeted=True, max_iter=100, learning_rate=0.01, batch_size=10, verbose=False)
+    # 2B. CUSTOM FULL (ART MATCH PyTorch GPU) - CON PROFILER
+    print("-> [2. CUSTOM ART-MATCH] Esecuzione replica fedele su GPU (PROFILING IN CORSO)...")
+    custom_cw_full_targ = CarliniLInfMethodPyTorch(
+        classifier=classifier, 
+        targeted=True, 
+        max_iter=5,           # <-- Abbassato a 20 SOLO per il profiler
+        learning_rate=0.01, 
+        batch_size=10, 
+        verbose=True
+    )
+    
     y_targets_np = y_target_llc.cpu().numpy()
     y_tgt_onehot = np.zeros((len(y_targets_np), 8631), dtype=np.float32)
     y_tgt_onehot[np.arange(len(y_targets_np)), y_targets_np] = 1.0
     
     start = time.time()
-    x_adv_full_targ_np = custom_cw_full_targ.generate(x=x_clean_np, y=y_tgt_onehot)
+    
+    # AVVIO DEL PROFILER
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=False # Disattivato per non rallentare troppo la stampa
+    ) as prof:
+        x_adv_full_targ_np = custom_cw_full_targ.generate(x=x_clean_np, y=y_tgt_onehot)
+        
     full_targ_time = time.time() - start
+    
+    # STAMPA DEI RISULTATI DEL PROFILER
+    print("\n" + "="*60)
+    print(" TOP 20 OPERAZIONI PIÙ LENTE SU GPU (CUDA Time):")
+    print("="*60)
+    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+
+    print("\n" + "="*60)
+    print(" TOP 20 OPERAZIONI PIÙ LENTE SU CPU (CPU Time):")
+    print("="*60)
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=20))
+    
+    # Valutazione
     full_targ_succ, full_targ_mean, full_targ_max = evaluate_batch(wrapped_model, x_clean, torch.tensor(x_adv_full_targ_np).to(device), y_true, y_target_llc)
 
     # 2C. CUSTOM C&W (Binary Steps)

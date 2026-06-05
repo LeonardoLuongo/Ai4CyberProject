@@ -1,0 +1,65 @@
+REPORT SCOUTING CARLINI & WAGNER L_INF
+Campioni testati: 100
+Budget Massimo L_inf: 0.1
+
+
+==================================================
+Inizio test per LEARNING RATE = 0.001
+==================================================
+
+Generazione C&W con max_iter=10, lr=0.001...
+   Linf stats: min=0.0000, mean=0.0023, median=0.0028, p95=0.0050, max=0.0051
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 56/100 (56.00%)
+-> Risultato: Targeted ASR (per eps <= 0.1) = 56.00%
+
+Generazione C&W con max_iter=50, lr=0.001...
+   Linf stats: min=0.0022, mean=0.0058, median=0.0054, p95=0.0083, max=0.0135
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Targeted ASR (per eps <= 0.1) = 100.00%
+   [!] Targeted ASR raggiunto il 100%. Salto max_iter successivi per questo LR per risparmiare tempo.
+
+==================================================
+Inizio test per LEARNING RATE = 0.005
+==================================================
+
+Generazione C&W con max_iter=10, lr=0.005...
+   Linf stats: min=0.0025, mean=0.0108, median=0.0110, p95=0.0140, max=0.0147
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Targeted ASR (per eps <= 0.1) = 100.00%
+   [!] Targeted ASR raggiunto il 100%. Salto max_iter successivi per questo LR per risparmiare tempo.
+
+==================================================
+Inizio test per LEARNING RATE = 0.01
+==================================================
+
+Generazione C&W con max_iter=10, lr=0.01...
+   Linf stats: min=0.0050, mean=0.0144, median=0.0220, p95=0.0256, max=0.0329
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Targeted ASR (per eps <= 0.1) = 100.00%
+   [!] Targeted ASR raggiunto il 100%. Salto max_iter successivi per questo LR per risparmiare tempo.
+
+==================================================
+Inizio test per LEARNING RATE = 0.05
+==================================================
+
+Generazione C&W con max_iter=10, lr=0.05...
+   Linf stats: min=0.0250, mean=0.0272, median=0.0250, p95=0.0263, max=0.0939
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Targeted ASR (per eps <= 0.1) = 100.00%
+   [!] Targeted ASR raggiunto il 100%. Salto max_iter successivi per questo LR per risparmiare tempo.
+
+==================================================
+Inizio test per LEARNING RATE = 0.1
+==================================================
+
+Generazione C&W con max_iter=10, lr=0.1...
+   Linf stats: min=0.0345, mean=0.0563, median=0.0500, p95=0.0939, max=0.0997
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Targeted ASR (per eps <= 0.1) = 100.00%
+   [!] Targeted ASR raggiunto il 100%. Salto max_iter successivi per questo LR per risparmiare tempo.

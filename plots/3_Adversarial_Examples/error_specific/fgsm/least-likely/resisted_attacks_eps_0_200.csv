@@ -1,3 +1,0 @@
-dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-4,"""Drake""",830,2148,5.0325966185482685e-06,dataset/clean_cropped/NN1/004_n002295_Drake/0009.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_200/004_n002295_Drake/0009.jpg
-78,"""Leymah_Gbowee""",4670,4787,1.1213747939109453e-06,dataset/clean_cropped/NN1/078_n005152_Leymah_Gbowee/0003.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_200/078_n005152_Leymah_Gbowee/0003.jpg

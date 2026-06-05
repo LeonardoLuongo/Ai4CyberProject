@@ -1,9 +1,0 @@
-dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-4,"""Drake""",8022,2148,3.222209272735199e-07,dataset/clean_cropped/NN1/004_n002295_Drake/0002.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_150/004_n002295_Drake/0002.jpg
-4,"""Drake""",917,2148,1.8612445273902267e-05,dataset/clean_cropped/NN1/004_n002295_Drake/0006.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_150/004_n002295_Drake/0006.jpg
-4,"""Drake""",830,2148,7.167177500377875e-06,dataset/clean_cropped/NN1/004_n002295_Drake/0009.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_150/004_n002295_Drake/0009.jpg
-16,"""Simon_Rattle""",271,7514,4.874638079854776e-07,dataset/clean_cropped/NN1/016_n008084_Simon_Rattle/0000.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_150/016_n008084_Simon_Rattle/0000.jpg
-22,"""Martín_Cáceres""",6396,5321,1.778003593244648e-06,dataset/clean_cropped/NN1/022_n005752_Mart_n_C_ceres/0007.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_150/022_n005752_Mart_n_C_ceres/0007.jpg
-43,"""Christophe_Maé""",4421,1573,3.75143536075484e-05,dataset/clean_cropped/NN1/043_n001670_Christophe_Ma/0006.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_150/043_n001670_Christophe_Ma/0006.jpg
-78,"""Leymah_Gbowee""",4670,4787,3.229898766221595e-07,dataset/clean_cropped/NN1/078_n005152_Leymah_Gbowee/0003.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_150/078_n005152_Leymah_Gbowee/0003.jpg
-91,"""Layne_Staley""",3621,4700,9.261769264412578e-06,dataset/clean_cropped/NN1/091_n005050_Layne_Staley/0003.jpg,dataset/attacks/NN1/error_specific/fgsm/least-likely/eps_0_150/091_n005050_Layne_Staley/0003.jpg

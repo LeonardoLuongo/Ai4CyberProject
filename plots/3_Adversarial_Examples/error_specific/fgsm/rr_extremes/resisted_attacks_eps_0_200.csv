@@ -1,2 +1,0 @@
-dataset_label,identity_name,target_class,clean_pred_class,target_confidence,source_image_path,adversarial_image_path
-75,"""Martin_Schulz""",3719,5308,8.210501619032584e-06,dataset/clean_cropped/NN1/075_n005738_Martin_Schulz/0007.jpg,dataset/attacks/NN1/error_specific/fgsm/rr_extremes/eps_0_200/075_n005738_Martin_Schulz/0007_to_3719.jpg
