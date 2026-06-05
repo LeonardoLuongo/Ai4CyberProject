@@ -1,150 +1,227 @@
-"""Generate error-generic BIM adversarial images for NN1.
-
-This attack uses the Basic Iterative Method (BIM) to make NN1 misclassify 
-each input image without forcing a specific target class. 
-It saves adversarial PNG images and a manifest CSV.
-"""
-
-from __future__ import annotations
+import os
 import sys
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+from tqdm import tqdm
 from pathlib import Path
+from PIL import Image
 
+# =========================================================================
+# RISOLUZIONE ROBUSTA DEI PATH (Previene gli errori di VS Code)
+# =========================================================================
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.util.attack_common import (
-    batched, 
-    build_nn1_art_classifier,
-    default_output_dir,
-    discover_test_images,
-    ensure_clean_output_dir,
-    load_batch_for_nn1,
-    output_path_for_sample,
-    perturbation_stats,
-    progress_line,
-    save_adv_image,
-    validate_eps,
-    write_json,
-    write_manifest,
-)
+from facenet_pytorch import InceptionResnetV1, MTCNN
+from art.estimators.classification import PyTorchClassifier
+from art.attacks.evasion import BasicIterativeMethod
 
+# Import corretti partendo dalla root
+from src.util.identity_mapper import IdentityMapper
+from src.util.basic_img.metrics import calculate_linf
+from src.util.attack_error_specific_utils import get_one_hot_target
 
-def main() -> int:
-    # =========================================================================
-    # PARAMETRI DI CONFIGURAZIONE
-    # =========================================================================
-    input_dir = Path("dataset/clean/test")
-    output_dir = None       
+def main():
+    print("======================================================")
+    print(" GENERATORE CAMPIONI: BIM ERROR-GENERIC (UNTARGETED)  ")
+    print("======================================================\n")
+
+    # Fissiamo la base_dir alla vera ROOT del progetto
+    base_dir = PROJECT_ROOT
+    print(f"-> Project Root impostata a: {base_dir}")
+
+    # --- 1. CONFIGURAZIONE PATH E PARAMETRI ---
+    csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
+    meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
     
-    # Parametri specifici dell'attacco
-    eps = 0.025             
-    eps_step = 0.005        # Dimensione del passo (Step size)
-    max_iter = 10           # Numero massimo di iterazioni
+    # OUTPUT DIR AGGIORNATA PER ERROR-GENERIC
+    output_base_dir = base_dir / "dataset" / "attacks" / "error_generic" / "bim"
+    cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"
     
-    batch_size = 64          
-    image_size = 160        
-    max_images = None       
-    overwrite = True        
-    # =========================================================================
-
-    validate_eps(eps)
-
-    if output_dir is None:
-        base_dir = Path("dataset/attacks/error_generic")
-        # Genererà ad esempio: dataset/attacks/error_generic/bim/eps_0_025
-        output_dir = default_output_dir(base_dir, "bim", eps)
+    # PARAMETRI DELL'ATTACCO UNTARGETED
+    epsilons = [0.025, 0.050, 0.075, 0.10, 0.150, 0.200]
+    BIM_MAX_ITER = 4 
+    BATCH_SIZE = 64  
     
-    ensure_clean_output_dir(output_dir, overwrite)
+    if not csv_path.exists() or not meta_csv_path.exists():
+        raise FileNotFoundError(f"Errore: manifest.csv o identity_meta.csv mancanti in {base_dir}")
 
-    samples = discover_test_images(input_dir)
-    if max_images is not None:
-        samples = samples[:max_images]
-    print(f"Found {len(samples)} test images.")
+    # --- 2. INIZIALIZZAZIONE MODELLI E MAPPER ---
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"-> Inizializzazione Reti su {device}...")
+    
+    mapper = IdentityMapper(meta_csv_path)
+    mtcnn = MTCNN(image_size=160, margin=0, keep_all=True, post_process=True, device=device)
+    
+    resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
+    resnet.classify = True 
 
-    print("Loading NN1 and wrapping it with ART PyTorchClassifier...")
-    classifier, num_classes, device_type = build_nn1_art_classifier()
-
-    # Importiamo BIM (Basic Iterative Method) invece di FGSM
-    from art.attacks.evasion import BasicIterativeMethod
-
-    attack = BasicIterativeMethod(
-        estimator=classifier, 
-        eps=eps, 
-        eps_step=eps_step, 
-        max_iter=max_iter, 
-        targeted=False
+    classifier = PyTorchClassifier(
+        model=resnet, clip_values=(0.0, 1.0), loss=nn.CrossEntropyLoss(), optimizer=None,
+        input_shape=(3, 160, 160), nb_classes=8631, preprocessing=(0.5, 0.5), 
+        device_type='gpu' if torch.cuda.is_available() else 'cpu'
     )
 
-    rows: list[dict[str, object]] = []
-    done = 0
-    for batch_index, batch_samples in enumerate(batched(samples, batch_size), start=1):
-        x = load_batch_for_nn1(batch_samples, image_size)
-        x_adv = attack.generate(x=x)
+    df_clean = pd.read_csv(csv_path)
+    print(f"-> Trovate {len(df_clean)} immagini totali nel manifest.")
 
-        for sample, original, adversarial in zip(batch_samples, x, x_adv):
-            adv_path = output_path_for_sample(output_dir, sample)
+    # =========================================================================
+    # FASE 1: MTCNN E SCREMATURA (Salvataggio Fisico Controllato con PIL)
+    # =========================================================================
+    print("\n[FASE 1] Ritaglio MTCNN, Scrematura e Salvataggio Clean Cropped...")
+    valid_records = []
+    
+    with torch.no_grad():
+        for index, row in tqdm(df_clean.iterrows(), total=len(df_clean), desc="Pre-Inferenza"):
+            class_id = str(row['identity_id'])
+            facenet_id = mapper.get_facenet_id_by_class_id(class_id)
+            if facenet_id == -1: continue
+                
+            source_img_path = base_dir / row['image_path']
+            identity_dir_name = source_img_path.parent.name
+            img_filename = source_img_path.name
+                
+            try:
+                img_pil = Image.open(str(source_img_path)).convert('RGB')
+            except Exception:
+                continue
             
-            save_adv_image(adversarial, adv_path)
+            faces = mtcnn(img_pil)
+            if faces is None: continue
             
-            linf, mean_abs = perturbation_stats(original, adversarial)
+            faces = faces.to(device)
+            logits_all = resnet(faces)
+            preds_all = torch.argmax(logits_all, dim=1).cpu().numpy()
             
-            rel_source_path = f"dataset/clean/test/{sample.relative_path.as_posix()}"
-            rel_adv_path = adv_path.as_posix()
+            if facenet_id in preds_all:
+                match_idx = np.where(preds_all == facenet_id)[0][0]
+                best_face_tensor = faces[match_idx]
+                
+                np_img_01 = (best_face_tensor.cpu().numpy() + 1.0) / 2.0
+                x_clean = np.expand_dims(np_img_01, axis=0) 
+                
+                out_crop_dir = cropped_clean_dir / identity_dir_name
+                out_crop_dir.mkdir(parents=True, exist_ok=True)
+                crop_save_path = out_crop_dir / img_filename
+                
+                # Salvataggio nativo in RGB con PIL (Infallibile su Windows)
+                img_c_save = (np.transpose(np_img_01, (1, 2, 0)) * 255.0).astype(np.uint8)
+                try:
+                    Image.fromarray(img_c_save).save(crop_save_path)
+                except Exception as e:
+                    print(f"\n[ERRORE FATALE] Impossibile salvare foto clean in: {crop_save_path} - Dettaglio: {e}")
+                    continue # Salta il record se non riesce a salvarlo
+                
+                row_dict = row.to_dict()
+                row_dict['true_facenet_id'] = facenet_id
+                row_dict['x_clean'] = x_clean 
+                row_dict['cropped_image_path'] = crop_save_path.relative_to(base_dir).as_posix() 
+                
+                valid_records.append(row_dict)
+
+    total_valid = len(valid_records)
+    print(f"-> Immagini d'oro pronte per l'attacco Untargeted: {total_valid}")
+
+    # =========================================================================
+    # FASE 2: GENERAZIONE DEGLI ATTACCHI UNTARGETED (BATCH DIRETTO CON PIL)
+    # =========================================================================
+    print(f"\n======================================================")
+    print(f" AVVIO GENERAZIONE ERROR-GENERIC")
+    print(f"======================================================")
+    
+    for eps in epsilons:
+        eps_str = f"eps_{eps:.3f}".replace('.', '_')
+        eps_dir = output_base_dir / eps_str
+        eps_dir.mkdir(parents=True, exist_ok=True)
+        
+        eps_tracker_records = []
+        current_eps_step = eps / 24.0
+        
+        print(f"\n[>>>] Generazione Untargeted Epsilon = {eps:.3f} | Step = {current_eps_step:.4f} | Iter = {BIM_MAX_ITER}")
+        
+        # Inizializziamo l'attacco con TARGETED = FALSE
+        attack = BasicIterativeMethod(
+            estimator=classifier, 
+            eps=eps, 
+            eps_step=current_eps_step,
+            max_iter=BIM_MAX_ITER,
+            targeted=False,
+            batch_size=BATCH_SIZE 
+        )
+        
+        for start_idx in tqdm(range(0, total_valid, BATCH_SIZE), desc=f"Batch Processing {eps_str}"):
+            end_idx = min(start_idx + BATCH_SIZE, total_valid)
+            batch_records = valid_records[start_idx:end_idx]
             
-            # STRUTTURA DEL MANIFEST AGGIORNATA CON EPS_STEP E MAX_ITER
-            rows.append(
-                {
-                    "attack_type": "bim",
+            batch_x_list = []
+            batch_y_list = []
+            
+            for row in batch_records:
+                batch_x_list.append(row['x_clean'][0])
+                
+                # Per l'attacco Untargeted, passiamo la VERA identità come target.
+                # In modalità Untargeted, ART userà questa Y per ALLONTANARSI (massimizzare la loss)
+                batch_y_list.append(get_one_hot_target(row['true_facenet_id'], num_classes=mapper.get_num_training_classes())[0])
+                
+            batch_x_array = np.stack(batch_x_list)
+            batch_y_array = np.stack(batch_y_list)
+            
+            # Generazione avversaria
+            x_adv_batch = attack.generate(x=batch_x_array, y=batch_y_array)
+            
+            for i, row in enumerate(batch_records):
+                x_clean_single = batch_x_array[i]
+                x_adv_single = x_adv_batch[i]
+                
+                img_c_plot = np.transpose(x_clean_single, (1, 2, 0))
+                img_a_plot = np.transpose(x_adv_single, (1, 2, 0))
+                
+                actual_linf = calculate_linf(img_c_plot, img_a_plot)
+                mean_abs_perturbation = float(np.mean(np.abs(img_a_plot - img_c_plot)))
+                
+                source_img_path = base_dir / row['image_path']
+                identity_dir_name = source_img_path.parent.name
+                orig_filename = source_img_path.stem 
+
+                out_img_dir = eps_dir / identity_dir_name
+                out_img_dir.mkdir(parents=True, exist_ok=True)
+                
+                adv_filename = f"{orig_filename}.jpg"
+                adv_save_path = out_img_dir / adv_filename
+                
+                # Salvataggio nativo in RGB con PIL
+                img_a_save = (img_a_plot * 255.0).astype(np.uint8)
+                try:
+                    Image.fromarray(img_a_save).save(adv_save_path)
+                except Exception as e:
+                    print(f"\n[ERRORE FATALE] Impossibile salvare l'attacco in: {adv_save_path} - Dettaglio: {e}")
+
+                rel_source = row['cropped_image_path']
+                rel_adv = adv_save_path.relative_to(base_dir).as_posix()
+
+                eps_tracker_records.append({
+                    "attack_type": "bim_error_generic", 
                     "eps": eps,
-                    "eps_step": eps_step,
-                    "max_iter": max_iter,
                     "targeted": False,
-                    "target_strategy": -1,
-                    "target_class": -1,
-                    "dataset_label": sample.dataset_label if sample.dataset_label is not None else -1,
-                    "identity_id": sample.identity_id if sample.identity_id else -1,
-                    "identity_name": sample.identity_name if sample.identity_name else -1,
-                    "identity_dir": sample.identity_dir if sample.identity_dir else -1,
-                    "source_image_path": rel_source_path,
-                    "adversarial_image_path": rel_adv_path,
-                    "linf": round(linf, 6),
-                    "mean_abs_perturbation": round(mean_abs, 6)
-                }
-            )
+                    "target_strategy": "none",
+                    "target_class": -1, # Non c'è bersaglio specifico
+                    "dataset_label": row['dataset_label'],
+                    "identity_id": row['identity_id'],
+                    "identity_name": row['identity_name'],
+                    "identity_dir": identity_dir_name,
+                    "source_image_path": rel_source,
+                    "adversarial_image_path": rel_adv,
+                    "linf": round(actual_linf, 6),
+                    "mean_abs_perturbation": round(mean_abs_perturbation, 6)
+                })
 
-        done += len(batch_samples)
-        print(progress_line(done, len(samples), batch_index))
-
-    write_manifest(output_dir / "manifest.csv", rows)
-    
-    write_json(
-        output_dir / "config.json",
-        {
-            "attack_type": "bim",
-            "classifier": "facenet_pytorch.InceptionResnetV1(pretrained='vggface2', classify=True)",
-            "art_estimator": "PyTorchClassifier",
-            "eps": eps,
-            "eps_step": eps_step,
-            "max_iter": max_iter,
-            "max_allowed_eps": 0.1,
-            "targeted": False,
-            "input_dir": input_dir.as_posix(),
-            "output_dir": output_dir.as_posix(),
-            "num_images": len(samples),
-            "max_images": max_images,
-            "batch_size": batch_size,
-            "image_size": image_size,
-            "num_classes": num_classes,
-            "device_type": device_type,
-            "saved_format": "PNG",
-        },
-    )
-
-    print(f"Saved adversarial images to: {output_dir}")
-    print(f"Saved manifest to: {output_dir / 'manifest.csv'}")
-    return 0
-
+        df_tracker = pd.DataFrame(eps_tracker_records)
+        df_tracker.to_csv(eps_dir / f"tracker_{eps_str}.csv", index=False)
+        
+    print("\n[OK] Processo Error-Generic completato con successo e immagini salvate (via PIL)!")
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
