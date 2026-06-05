@@ -68,7 +68,7 @@ def main():
         # --- LOGGING SU GOOGLE SHEETS ---
         try:
             logger.log_attack_metrics(
-                tester="IlTuoNome",  # <--- Ricordati di inserire il tuo nome!
+                tester="Leonardo",
                 attack_type="DeepFool Error-Generic",
                 strategy="Untargeted",
                 epsilon=eps,
