@@ -63,7 +63,7 @@ def main():
     
     # Path di output coerenti con il resto del team
     cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"
-    output_base_dir = base_dir / "dataset" / "attacks" / "error_generic" / "pgd"
+    output_base_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_generic" / "pgd"
     # =========================================================================
 
     if not csv_path.exists() or not meta_csv_path.exists():
