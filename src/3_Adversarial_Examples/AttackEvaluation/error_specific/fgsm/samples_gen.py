@@ -1,4 +1,9 @@
 import os
+# =========================================================================
+# WORKAROUND CUDNN (Fondamentale per PGD iterativo)
+# =========================================================================
+os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "0" 
+
 import cv2
 import json
 import numpy as np
@@ -8,6 +13,11 @@ import torch.nn as nn
 from tqdm import tqdm
 from pathlib import Path
 from PIL import Image
+
+# Disabilitiamo CUDNN per evitare il mismatch di librerie durante l'attacco
+torch.backends.cudnn.enabled = False
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
 
 from facenet_pytorch import InceptionResnetV1, MTCNN
 from art.estimators.classification import PyTorchClassifier
@@ -32,7 +42,7 @@ def main():
     cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"
     # Epsilon da testare (incluso il 0.20 per vedere l'asintoto)
     epsilons = [0.025, 0.05, 0.075, 0.10, 0.15, 0.20]
-    strategies = ["next_best", "random", "rr_lookalikes", "rr_extremes", "rr_diversity"]
+    strategies = ["next_best", "random", "rr_lookalikes", "rr_extremes", "rr_diversity", "least-likely"]
     
     rr_json_path = base_dir / "dataset" / "clean" / "splits" / "rr_subsets.json"
     with open(rr_json_path, 'r') as f:

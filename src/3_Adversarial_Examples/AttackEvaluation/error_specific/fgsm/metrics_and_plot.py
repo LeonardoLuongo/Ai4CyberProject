@@ -1,8 +1,14 @@
 import os
+os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "0" 
 import cv2
 import numpy as np
 import pandas as pd
 import torch
+
+# Disabilitiamo CUDNN per evitare il mismatch di librerie
+torch.backends.cudnn.enabled = False
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -13,6 +19,7 @@ from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 # Utilizziamo PYTHONPATH=src per gli import
+from util.google_logger import GoogleSheetLogger  
 from util.plot.utils_plot_specific import (
     plot_targeted_success_curve,
     plot_target_confidence_growth,
@@ -40,13 +47,16 @@ def main():
     base_attacks_dir = base_dir / "dataset" / "attacks" / "error_specific" / "fgsm"
     base_plots_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_specific" / "fgsm"
     
-    strategies = ["next_best", "random", "rr_lookalikes", "rr_extremes", "rr_diversity"]
+    strategies = ["next_best", "random", "rr_lookalikes", "rr_extremes", "rr_diversity", "least-likely"]
 
     # Inizializziamo il modello una sola volta fuori dal ciclo per risparmiare tempo e VRAM
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"-> Inizializzazione NN1 globale su {device}...")
     resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
     resnet.classify = True 
+
+    # --- INIZIALIZZAZIONE LOGGER ---
+    logger = GoogleSheetLogger()
 
     for strategy in strategies:
         print(f"\n======================================================")
@@ -150,21 +160,29 @@ def main():
             df_eps = df[df['eps'] == eps]
             total = len(df_eps)
             
-            successes_df = df_eps[df_eps['adv_pred_class'] == df_eps['target_class']]
-            resisted_df = df_eps[df_eps['adv_pred_class'] == df_eps['clean_pred_class']]
+            # --- FIX MATEMATICO: Stati Mutuamente Esclusivi ---
+            resisted_mask = df_eps['adv_pred_class'] == df_eps['clean_pred_class']
+            targeted_mask = (df_eps['adv_pred_class'] == df_eps['target_class']) & (~resisted_mask)
+            untargeted_mask = (~resisted_mask) & (~targeted_mask)
             
-            successes = len(successes_df)
-            resisted = len(resisted_df)
-            untargeted = total - successes - resisted 
+            resisted = resisted_mask.sum()
+            successes = targeted_mask.sum()
+            untargeted = untargeted_mask.sum()
             
-            asr_dict["FGSM Targeted"].append(successes / total)
+            robust_accuracy = resisted / total
+            targeted_asr = successes / total
+            untargeted_asr = untargeted / total
+            
+            # Popoliamo i dizionari per i plot
+            asr_dict["FGSM Targeted"].append(targeted_asr)
             confidence_data.append(df_eps['target_confidence'].values)
             
-            outcome_data["Targeted"].append((successes / total) * 100)
-            outcome_data["Resisted"].append((resisted / total) * 100)
-            outcome_data["Untargeted"].append((untargeted / total) * 100)
+            outcome_data["Targeted"].append(targeted_asr * 100)
+            outcome_data["Resisted"].append(robust_accuracy * 100)
+            outcome_data["Untargeted"].append(untargeted_asr * 100)
             
             # --- ESPORTAZIONE CSV RESISTENTI ---
+            resisted_df = df_eps[resisted_mask]
             if resisted > 0:
                 eps_str_fmt = f"{eps:.3f}".replace('.', '_')
                 resisted_csv_path = output_eval_dir / f"resisted_attacks_eps_{eps_str_fmt}.csv"
@@ -177,7 +195,20 @@ def main():
                 ]]
                 resisted_export.to_csv(resisted_csv_path, index=False)
 
-        # Chiamata ai grafici appena aggiornati (stamperanno le percentuali!)
+            # --- LOGGING SU GOOGLE SHEETS ---
+            logger.log_attack_metrics(
+                tester="Leonardo",
+                attack_type="FGSM Error-Specific",
+                strategy=strategy,
+                epsilon=eps,
+                defense_type="None",
+                robust_accuracy=robust_accuracy,
+                targeted_asr=targeted_asr,
+                untargeted_asr=untargeted_asr,
+                notes="Valutazione Clean -> Adv"
+            )
+
+        # Chiamata ai grafici
         plot_targeted_success_curve(epsilons, asr_dict, "NN1", True, str(output_eval_dir / "tasr_curve_global.png"))
         plot_target_confidence_growth(epsilons, confidence_data, f"FGSM Targeted ({strategy})", True, str(output_eval_dir / "target_confidence_global.png"))
         plot_attack_outcome_distribution(epsilons, outcome_data, f"FGSM Targeted ({strategy})", True, str(output_eval_dir / "outcome_distribution_stacked.png"))
@@ -199,6 +230,13 @@ def main():
             a_rgb = cv2.cvtColor(a_bgr, cv2.COLOR_BGR2RGB)
 
             eps_str_fmt = f"{eps:.3f}".replace('.', '_')
+            
+            # plot_adversarial_showcase(
+            #     c_rgb, a_rgb, 
+            #     f"ID {int(sample['clean_pred_class'])}", 
+            #     f"ID {int(sample['adv_pred_class'])}", 
+            #     True, str(progression_dir / f"showcase_eps_{eps_str_fmt}.png")
+            # )
             plot_adversarial_showcase(
                 c_rgb, a_rgb, 
                 f"Orig: {sample['identity_name']}", f"Pred: ID {sample['adv_pred_class']}", 
@@ -383,13 +421,13 @@ def main():
                         resnet.classify = True
                         tgt_clean_emb = np.array(tgt_clean_emb)
                 
-                # Titolo customizzato per UMAP (Passando il nome per includere l'epsilon)
+                # Titolo customizzato per UMAP 
                 custom_title = f'"{identity_name}" attacked with \u03B5={PIVOT_EPS:.3f}'
                 
                 plot_latent_trajectory(
                     np.array(bg_emb), bg_labels,
                     np.array(src_clean_emb), np.array(src_adv_emb),
-                    src_label_name=custom_title,  # <--- INSERIMENTO EPSILON NEL TITOLO
+                    src_label_name=custom_title,  
                     adv_success_flags=adv_success_flags,
                     adv_target_names=adv_target_names,
                     adv_actual_pred_names=adv_actual_pred_names,
@@ -409,7 +447,7 @@ def main():
                     c_embs, c_lbls = [], []
                     a_embs, a_flags = [], []
                     a_src_lbls = [] 
-                    a_tgt_lbls = [] # <--- NUOVO: Raccogliamo il target per il pop-up
+                    a_tgt_lbls = [] 
 
                     resnet.classify = False
                     with torch.no_grad():
@@ -427,7 +465,7 @@ def main():
                             
                             a_embs.append(resnet(torch.tensor(np.expand_dims(img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
                             a_flags.append(row['adv_pred_class'] == row['target_class'])
-                            a_src_lbls.append(row['identity_name']) # <--- NUOVO: Salviamo da chi proviene l'attacco
+                            a_src_lbls.append(row['identity_name']) 
 
                             # Assumo che 'target_class' sia l'ID o il nome, adattalo se nel dataframe si chiama in un altro modo
                             a_tgt_lbls.append(str(row['target_class'])) 
