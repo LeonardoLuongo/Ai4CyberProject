@@ -5,3 +5,6 @@
 **.pyc
 google_credentials.json
 credentials.json
+*.pkl
+*.zip
+*.tar*
