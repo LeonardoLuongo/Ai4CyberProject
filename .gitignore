@@ -8,3 +8,5 @@ credentials.json
 *.pkl
 *.zip
 *.tar*
+**/dataset/**/*.npy
+**/*_eps_0_*.csv
