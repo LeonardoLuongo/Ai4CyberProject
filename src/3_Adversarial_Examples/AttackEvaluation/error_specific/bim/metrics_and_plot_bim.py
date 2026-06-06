@@ -10,6 +10,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"  
 
 import sys
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -22,10 +23,9 @@ torch.backends.cudnn.deterministic = True
 import torch.nn.functional as F
 from tqdm import tqdm
 from pathlib import Path
-from PIL import Image, ImageOps, UnidentifiedImageError
 
 # =========================================================================
-# RISOLUZIONE ROBUSTA DEI PATH E FUNZIONI IMMAGINE (PIL)
+# RISOLUZIONE ROBUSTA DEI PATH E FUNZIONI IMMAGINE (TIFF FLOAT32)
 # =========================================================================
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
 if str(PROJECT_ROOT) not in sys.path:
@@ -62,17 +62,25 @@ def resolve_project_path(base_dir: Path, path_value) -> Path:
     return base_dir / path
 
 def load_rgb_image(path: Path, image_size: int = IMAGE_SIZE) -> np.ndarray:
-    try:
-        with Image.open(path) as image:
-            image = ImageOps.exif_transpose(image).convert("RGB")
-            if image.size != (image_size, image_size):
-                image = image.resize((image_size, image_size), Image.Resampling.BILINEAR)
-            return np.asarray(image, dtype=np.uint8)
-    except (OSError, UnidentifiedImageError) as exc:
-        raise FileNotFoundError(f"Immagine non leggibile: {path}") from exc
+    image_bgr_float32 = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if image_bgr_float32 is None:
+        raise FileNotFoundError(f"TIFF non leggibile: {path}")
+    if image_bgr_float32.ndim != 3 or image_bgr_float32.shape[2] != 3:
+        raise ValueError(
+            f"TIFF RGB non valido: {path}, shape={image_bgr_float32.shape}"
+        )
+    if image_bgr_float32.shape[:2] != (image_size, image_size):
+        image_bgr_float32 = cv2.resize(
+            image_bgr_float32,
+            (image_size, image_size),
+            interpolation=cv2.INTER_LINEAR,
+        )
+
+    image_rgb_float32 = cv2.cvtColor(image_bgr_float32, cv2.COLOR_BGR2RGB)
+    return image_rgb_float32.astype(np.float32)
 
 def rgb_to_chw_01(image_rgb: np.ndarray) -> np.ndarray:
-    return np.transpose(image_rgb, (2, 0, 1)).astype(np.float32) / 255.0
+    return np.transpose(image_rgb, (2, 0, 1)).astype(np.float32)
 
 def main():
     print("======================================================")
@@ -83,7 +91,7 @@ def main():
     print(f"-> Project Root impostata a: {base_dir}")
     
     # PERCORSI IMPOSTATI PER BIM
-    base_attacks_dir = base_dir / "dataset" / "attacks" / "error_specific" / "bim"
+    base_attacks_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_specific" / "bim"
     base_plots_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_specific" / "bim"
     
     strategies = ["next_best", "least-likely", "random"]
@@ -233,7 +241,7 @@ def main():
                     robust_accuracy=robust_accuracy,
                     targeted_asr=targeted_asr,
                     untargeted_asr=untargeted_asr,
-                    notes="Valutazione Clean -> Adv"
+                    notes="Valutazione Clean -> Adv TIFF 32-bit"
                 )
             else:
                 logger.log_biometric_metrics(
