@@ -109,15 +109,17 @@ def main():
         if not suitable_samples.empty:
             sample = suitable_samples.iloc[0]
             
-            c_bgr = cv2.imread(str(base_dir / sample['source_image_path']))
-            a_bgr = cv2.imread(str(base_dir / sample['adversarial_image_path']))
+            # --- MODIFICA TIFF 32-BIT ---
+            # Carichiamo i TIFF senza perdere la precisione float32
+            c_bgr_float32 = cv2.imread(str(base_dir / sample['source_image_path']), cv2.IMREAD_UNCHANGED)
+            a_bgr_float32 = cv2.imread(str(base_dir / sample['adversarial_image_path']), cv2.IMREAD_UNCHANGED)
             
             # Controllo sicurezza path
-            if c_bgr is None or a_bgr is None: continue
+            if c_bgr_float32 is None or a_bgr_float32 is None: continue
             
-            # Niente resize, le immagini sono già state salvate a 160x160 da samples_gen
-            c_rgb = cv2.cvtColor(c_bgr, cv2.COLOR_BGR2RGB)
-            a_rgb = cv2.cvtColor(a_bgr, cv2.COLOR_BGR2RGB)
+            # Convertiamo in RGB. Essendo già in range [0.0, 1.0] float32, non serve dividere per 255
+            c_rgb = cv2.cvtColor(c_bgr_float32, cv2.COLOR_BGR2RGB)
+            a_rgb = cv2.cvtColor(a_bgr_float32, cv2.COLOR_BGR2RGB)
 
             eps_str_fmt = f"{eps:.3f}".replace('.', '_')
             

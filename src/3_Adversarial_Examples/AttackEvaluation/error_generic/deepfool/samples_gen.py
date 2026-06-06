@@ -71,10 +71,11 @@ def main():
     df_clean = pd.read_csv(csv_path)
 
     # =========================================================================
-    # FASE 1: MTCNN E SCREMATURA (Filtro Nativi Errati)
+    # FASE 1: MTCNN E SCREMATURA (Filtro Zero-Shot e Caching TIFF 32-bit)
     # =========================================================================
     print("\n[FASE 1] Ritaglio MTCNN e Scrematura (Filtro Zero-Shot / Misclassificate)...")
     valid_records = []
+    cached_count = 0
     
     with torch.no_grad():
         for index, row in tqdm(df_clean.iterrows(), total=len(df_clean), desc="Pre-Inferenza"):
@@ -83,12 +84,44 @@ def main():
             facenet_id = mapper.get_facenet_id_by_class_id(class_id)
             if facenet_id == -1: continue
                 
-            source_img_path = str(base_dir / row['image_path'])
-            identity_dir_name = Path(source_img_path).parent.name
-            img_filename = Path(source_img_path).name
+            source_img_path = Path(base_dir / row['image_path'])
+            identity_dir_name = source_img_path.parent.name
+            
+            # --- MODIFICA: Usiamo il TIFF 32-bit float ---
+            img_filename_tiff = f"{source_img_path.stem}.tiff"
+            
+            out_crop_dir = cropped_clean_dir / identity_dir_name
+            out_crop_dir.mkdir(parents=True, exist_ok=True)
+            crop_save_path = out_crop_dir / img_filename_tiff
+            
+            # --- LOGICA DI CACHING (TIFF 32-BIT) ---
+            if crop_save_path.exists():
+                img_bgr_float32 = cv2.imread(str(crop_save_path), cv2.IMREAD_UNCHANGED)
+                img_rgb_float32 = cv2.cvtColor(img_bgr_float32, cv2.COLOR_BGR2RGB)
                 
+                x_clean = np.expand_dims(np.transpose(img_rgb_float32, (2, 0, 1)), axis=0)
+                
+                # Calcoliamo i logits al volo dalla cache
+                t_clean = torch.tensor(x_clean * 2.0 - 1.0).to(device)
+                best_logits = resnet(t_clean).cpu().numpy()[0]
+                
+                valid_records.append({
+                    'dataset_label': row['dataset_label'],
+                    'identity_id': row['identity_id'],
+                    'identity_name': row['identity_name'],
+                    'identity_dir_name': identity_dir_name,
+                    'img_filename': img_filename_tiff,
+                    'cropped_image_path': str(crop_save_path),
+                    'true_facenet_id': facenet_id,  
+                    'clean_logits': best_logits,
+                    'x_clean': x_clean
+                })
+                cached_count += 1
+                continue
+
+            # --- ESTRAZIONE SE NON IN CACHE ---
             try:
-                img_pil = Image.open(source_img_path).convert('RGB')
+                img_pil = Image.open(str(source_img_path)).convert('RGB')
             except Exception: continue
             
             faces = mtcnn(img_pil)
@@ -101,37 +134,28 @@ def main():
             if facenet_id in preds_all:
                 match_idx = np.where(preds_all == facenet_id)[0][0]
                 best_face_tensor = faces[match_idx]
-                
-                # Salviamo ANCHE i logits originali per estrarre la confidenza dopo!
                 best_logits = logits_all[match_idx].cpu().numpy()
                 
                 np_img_01 = (best_face_tensor.cpu().numpy() + 1.0) / 2.0
                 x_clean = np.expand_dims(np_img_01, axis=0) 
                 
-                # Salvataggio fisico dell'immagine Clean Cropped 
-                out_crop_dir = cropped_clean_dir / identity_dir_name
-                out_crop_dir.mkdir(parents=True, exist_ok=True)
-                crop_save_path = out_crop_dir / img_filename
+                # --- MODIFICA: Salvataggio TIFF 32-bit ---
+                img_c_bgr_float32 = cv2.cvtColor(np.transpose(np_img_01, (1, 2, 0)), cv2.COLOR_RGB2BGR)
+                cv2.imwrite(str(crop_save_path), img_c_bgr_float32)
                 
-                img_c_save = (np.transpose(np_img_01, (1, 2, 0)) * 255.0).astype(np.uint8)
-                img_c_bgr = cv2.cvtColor(img_c_save, cv2.COLOR_RGB2BGR)
-                cv2.imwrite(str(crop_save_path), img_c_bgr)
-                
-                # CREAZIONE DIZIONARIO ROBUSTO
-                record = {
+                valid_records.append({
                     'dataset_label': row['dataset_label'],
                     'identity_id': row['identity_id'],
                     'identity_name': row['identity_name'],
                     'identity_dir_name': identity_dir_name,
-                    'img_filename': img_filename,
+                    'img_filename': img_filename_tiff,
                     'cropped_image_path': str(crop_save_path),
                     'true_facenet_id': facenet_id,  
                     'clean_logits': best_logits,
                     'x_clean': x_clean
-                }
-                valid_records.append(record)
+                })
 
-    print(f"-> Immagini d'oro pronte per l'attacco: {len(valid_records)}")
+    print(f"-> Immagini d'oro pronte: {len(valid_records)} ({cached_count} da cache TIFF)")
 
     # =========================================================================
     # FASE 2: GENERAZIONE DEEPFOOL E INFERENZA AL VOLO
@@ -175,14 +199,13 @@ def main():
         actual_linf = calculate_linf(img_c_plot, img_a_plot)
         mean_abs_perturbation = float(np.mean(np.abs(img_a_plot - img_c_plot)))
 
-        # Salvataggio Immagine Avversaria (Per lo showcase visivo, sapendo che perde precisione)
+        # Salvataggio Immagine Avversaria in TIFF 32-bit
         out_img_dir = samples_dir / identity_dir_name
         out_img_dir.mkdir(parents=True, exist_ok=True)
-        adv_save_path = out_img_dir / img_filename
+        adv_save_path = out_img_dir / img_filename # img_filename ora contiene già ".tiff"
         
-        img_a_save = (img_a_plot * 255.0).astype(np.uint8)
-        img_a_bgr = cv2.cvtColor(img_a_save, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(str(adv_save_path), img_a_bgr)
+        img_a_bgr_float32 = cv2.cvtColor(img_a_plot.astype(np.float32), cv2.COLOR_RGB2BGR)
+        cv2.imwrite(str(adv_save_path), img_a_bgr_float32)
 
         rel_source = Path(record['cropped_image_path']).relative_to(base_dir).as_posix()
         rel_adv = adv_save_path.relative_to(base_dir).as_posix()
