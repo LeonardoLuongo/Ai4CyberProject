@@ -1,248 +1,308 @@
-"""Script per il tuning degli iperparametri di PGD TARGETED (Distribuzione a 3 stati).
-
-Coerente con lo script BIM del collega: traccia la distribuzione a 3 stati 
-(Resisted, Untargeted Success, Targeted Success) valutando l'evoluzione
-dell'attacco all'aumentare dell'Epsilon.
-"""
-
-from __future__ import annotations
-import sys
 import os
-from pathlib import Path
+import time
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
 import torch
+import torch.nn as nn
+from tqdm import tqdm
+from pathlib import Path
 from PIL import Image
 
-# =========================================================================
-# WORKAROUND CUDNN
-# =========================================================================
-os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "0" 
-torch.backends.cudnn.enabled = False
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-PROJECT_ROOT = Path(__file__).resolve().parents[5]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# Impostazioni estetiche
+sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
 
-from util.attack_common import build_nn1_art_classifier, discover_test_images
+from facenet_pytorch import InceptionResnetV1, MTCNN
+from art.estimators.classification import PyTorchClassifier
+
+# Importiamo la tua classe ottimizzata e le utility
+from util.cw_benchmarks.cw_pytorch import CarliniLInfMethodPyTorch
 from util.identity_mapper import IdentityMapper
 from util.attack_error_specific_utils import select_target_label, get_one_hot_target
 
-from facenet_pytorch import MTCNN
-from art.attacks.evasion import ProjectedGradientDescent
+# ==========================================
+# WRAPPER (Per Normalizzazione Range)
+# ==========================================
+class FacenetWrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, x):
+        return self.model(x * 2.0 - 1.0)
 
-def main() -> int:
+def main():
     print("======================================================")
-    print(" SCOUTING PGD: DISTRIBUZIONE A 3 STATI (Worst-Case)   ")
+    print(" SCOUTING HYPER-PARAMS: C&W TARGETED (Least-Likely)   ")
     print("======================================================\n")
 
-    # =========================================================================
-    # PARAMETRI DI TUNING E SETUP
-    # =========================================================================
-    base_dir = Path(os.getcwd())
-    input_dir = base_dir / "dataset" / "clean" / "test"
+    base_dir = Path.cwd()
+    csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
     meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
+    output_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_specific" / "cw"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    batch_size = 64  
-    max_images = None 
+    txt_log_path = output_dir / "cw_targeted_scouting_report.txt"
 
-    # Fissiamo i parametri che abbiamo scoperto essere ottimali prima
-    BEST_MAX_ITER = 10
-    NUM_INIT = 1
+    # --- PARAMETRI GRID SEARCH ---
+    BUDGET_LINF = 0.10
+    SAMPLES_PER_ID = 1  
+    BATCH_SIZE = 128
     
-    # Variabiliamo Epsilon e Moltiplicatore per il grafico coerente col collega
-    epsilons = [0.01, 0.02, 0.03, 0.04, 0.05]
-    step_multipliers = [1.0, 1.5, 2.0]  
-    
-    plots_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_specific" / "pgd" / "scouting"
-    plots_dir.mkdir(parents=True, exist_ok=True)
-    
+    # Parametri da esplorare (Targeted su Least-Likely richiede più convergenza)
+    learning_rates = [0.005, 0.01, 0.05, 0.1]
+    max_iters_list = [5, 10, 25, 50, 100, 200]
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    mapper = IdentityMapper(meta_csv_path)
-    # =========================================================================
-
-    samples = discover_test_images(input_dir)
-    if max_images is not None:
-        samples = samples[:max_images]
-
     print(f"-> Inizializzazione Reti su {device}...")
-    classifier, num_classes, device_type = build_nn1_art_classifier()
+    
+    mapper = IdentityMapper(meta_csv_path)
     mtcnn = MTCNN(image_size=160, margin=0, keep_all=True, post_process=True, device=device)
-    resnet_model = classifier.model 
-
-    # =========================================================================
-    # FASE 1: PRE-FILTRAGGIO E SALVATAGGIO CLASSI REALI E TARGET
-    # =========================================================================
-    print(f"\n[FASE 1] Estrazione Volti e Calcolo Hardest Target (Least-Likely)...")
     
-    valid_faces = []
-    hardest_targets = []
-    true_classes = [] # FONDAMENTALE PER CALCOLARE I 3 STATI
+    resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
+    resnet.classify = True 
+    wrapped_model = FacenetWrapper(resnet).eval()
+
+    # ART Classifier con 8631 classi piene
+    classifier = PyTorchClassifier(
+        model=resnet, loss=nn.CrossEntropyLoss(), input_shape=(3, 160, 160), 
+        nb_classes=8631, preprocessing=(0.5, 0.5), clip_values=(0.0, 1.0), 
+        device_type='gpu' if torch.cuda.is_available() else 'cpu'
+    )
+
+    df_clean = pd.read_csv(csv_path)
+
+    # --- FASE 1: PRE-FILTRAGGIO E TARGETING ---
+    print(f"\n[FASE 1] Estrazione e Generazione Target LLC su 8631 classi ({SAMPLES_PER_ID} img/ID)...")
+    valid_x = []
+    valid_y_true = []
+    valid_y_target_onehot = []
+    valid_y_target_raw = []
     
-    for sample in samples:
-        true_id = mapper.get_facenet_id_by_class_id(sample.identity_id)
-        if true_id == -1: continue
-            
-        try:
-            img_pil = Image.open(sample.image_path).convert('RGB')
-        except Exception: continue
-            
-        faces = mtcnn(img_pil)
-        if faces is not None:
-            faces = faces.to(device)
-            with torch.no_grad():
-                logits = resnet_model(faces)
-                preds = torch.argmax(logits, dim=1).cpu().numpy()
-            
-            if true_id in preds:
-                correct_idx = np.where(preds == true_id)[0][0]
-                
-                face_tensor = faces[correct_idx].cpu().numpy()
-                face_tensor_01 = (face_tensor + 1.0) / 2.0
-                
-                clean_logits = np.expand_dims(logits[correct_idx].cpu().numpy(), axis=0)
-                
-                least_likely_class = select_target_label(
-                    clean_predictions=clean_logits, 
-                    true_label=true_id, 
-                    strategy="least-likely", 
-                    num_classes=num_classes
-                )
-                
-                valid_faces.append(face_tensor_01)
-                hardest_targets.append(least_likely_class)
-                true_classes.append(true_id)
-
-    total_valid = len(valid_faces)
-    print(f" -> 🟢 Volti validi pronti per l'attacco Worst-Case: {total_valid}")
-    if total_valid == 0: return 1
-
-    X_valid = np.stack(valid_faces)
-    Y_targets = np.array(hardest_targets)
-    Y_true = np.array(true_classes)
-
-    # =========================================================================
-    # FASE 2: GRID SEARCH CON ANALISI A 3 STATI
-    # =========================================================================
-    # Struttura dati per il grafico
-    results_dist = {mult: {'resisted': [], 'untargeted': [], 'targeted': []} for mult in step_multipliers}
-
-    print("\n[FASE 2] Inizio Generazione PGD (Analisi 3 Stati)")
+    grouped = df_clean.groupby('identity_id')
     
-    for mult in step_multipliers:
-        print(f"\n{'-'*60}\nInizio test per Moltiplicatore = {mult}\n{'-'*60}")
+    with torch.no_grad():
+        for identity_id, group in tqdm(grouped, desc="Pre-Inferenza e Targeting"):
+            facenet_id = mapper.get_facenet_id_by_class_id(identity_id)
+            if facenet_id == -1: continue
+            
+            samples_taken = 0
+            for _, row in group.iterrows():
+                if SAMPLES_PER_ID is not None and samples_taken >= SAMPLES_PER_ID:
+                    break
+                    
+                img_path = str(base_dir / row['image_path'])
+                try:
+                    img_pil = Image.open(img_path).convert('RGB')
+                except: continue
+                
+                faces = mtcnn(img_pil)
+                if faces is None: continue
+                
+                faces = faces.to(device)
+                logits_all = resnet(faces)
+                preds_all = torch.argmax(logits_all, dim=1).cpu().numpy()
+                
+                if facenet_id in preds_all:
+                    match_idx = int(np.where(preds_all == facenet_id)[0][0])
+                    best_face = faces[match_idx] 
+                    
+                    # Recuperiamo i logit completi (8631 classi)
+                    best_logits = logits_all[match_idx].unsqueeze(0).cpu().numpy()
+                    tensor_img_01 = (best_face + 1.0) / 2.0
+                    
+                    # SELEZIONE TARGET LEAST-LIKELY SULLE 8631 CLASSI
+                    t_id = select_target_label(best_logits, facenet_id, strategy="least-likely", num_classes=8631)
+                    y_target_onehot = get_one_hot_target(t_id, num_classes=8631)
+                    
+                    # Convertiamo il tensore in numpy per l'attacco ART
+                    valid_x.append(tensor_img_01.cpu().numpy())
+                    valid_y_true.append(facenet_id)
+                    valid_y_target_onehot.append(y_target_onehot[0])
+                    valid_y_target_raw.append(t_id)
+                    samples_taken += 1
+
+    if not valid_x:
+        print("[ERRORE] Nessun campione valido.")
+        return
+
+    # Gli array sono pronti per essere consumati da CarliniLInfMethodPyTorch (richiede Numpy)
+    x_clean_np = np.stack(valid_x)
+    y_target_onehot_np = np.stack(valid_y_target_onehot)
+    
+    # Tensori per la valutazione ultraveloce PyTorch
+    x_clean_tensor = torch.tensor(x_clean_np).to(device)
+    y_target_tensor = torch.tensor(valid_y_target_raw, dtype=torch.long, device=device)
+    
+    total_samples = len(valid_x)
+    print(f"-> Immagini valide raccolte: {total_samples}")
+
+    # --- FASE 2: GRID SEARCH AVVERSARIA TARGETED ---
+    print("\n[FASE 2] Avvio C&W Targeted Grid Search...\n")
+    
+    if torch.cuda.is_available(): torch.cuda.empty_cache()
+    
+    with open(txt_log_path, 'w') as f:
+        f.write(f"REPORT SCOUTING CARLINI & WAGNER TARGETED (LLC SU 8631 CLASSI)\n")
+        f.write(f"Campioni testati: {total_samples}\n")
+        f.write(f"Budget Massimo L_inf: {BUDGET_LINF}\n\n")
+
+    plot_data = {lr: {'iters': [], 'acc': [], 'linf': [], 'early_stopped': False} for lr in learning_rates}
+
+    for lr in learning_rates:
+        print(f"\n{'='*50}")
+        print(f"Inizio test per LEARNING RATE = {lr}")
+        print(f"{'='*50}")
         
-        for eps in epsilons:
-            eps_step = (eps / BEST_MAX_ITER) * mult
+        with open(txt_log_path, 'a') as f:
+            f.write(f"\n{'='*50}\nInizio test per LEARNING RATE = {lr}\n{'='*50}\n")
             
-            attack = ProjectedGradientDescent(
-                estimator=classifier, 
-                eps=eps, 
-                eps_step=eps_step, 
-                max_iter=BEST_MAX_ITER, 
-                num_random_init=NUM_INIT,
-                targeted=True,
-                batch_size=batch_size,
+        for steps in max_iters_list:
+            log_str = f"\nGenerazione C&W con max_iter={steps}, lr={lr}..."
+            print(log_str)
+            
+            # 1. Istanziamo la tua classe Ultra-veloce
+            attack = CarliniLInfMethodPyTorch(
+                classifier=classifier, 
+                targeted=True, 
+                max_iter=steps,         
+                learning_rate=lr,
+                batch_size=BATCH_SIZE,
                 verbose=False
             )
             
-            count_resisted = 0
-            count_targeted = 0
-            count_untargeted = 0
+            start_time = time.time()
             
-            for start_idx in range(0, total_valid, batch_size):
-                end_idx = min(start_idx + batch_size, total_valid)
-                batch_x = X_valid[start_idx:end_idx]
-                batch_targets = Y_targets[start_idx:end_idx]
-                batch_true_ids = Y_true[start_idx:end_idx]
-                
-                batch_y_onehot = np.concatenate([get_one_hot_target(t, num_classes) for t in batch_targets], axis=0)
-                
-                x_adv = attack.generate(x=batch_x, y=batch_y_onehot)
-                adv_preds = np.argmax(classifier.predict(x_adv), axis=1)
-                
-                # --- CALCOLO DEI 3 STATI (Identico al collega) ---
-                resisted_mask = (adv_preds == batch_true_ids)
-                count_resisted += np.sum(resisted_mask)
-                
-                targeted_mask = (adv_preds == batch_targets)
-                count_targeted += np.sum(targeted_mask)
-                
-                untargeted_mask = (~resisted_mask) & (~targeted_mask)
-                count_untargeted += np.sum(untargeted_mask)
+            # 2. Generazione Batched
+            x_adv_np = attack.generate(x=x_clean_np, y=y_target_onehot_np)
+            gen_time = time.time() - start_time
             
-            p_res = count_resisted / total_valid
-            p_unt = count_untargeted / total_valid
-            p_tar = count_targeted / total_valid
+            x_adv_tensor = torch.tensor(x_adv_np).to(device)
             
-            results_dist[mult]['resisted'].append(p_res)
-            results_dist[mult]['untargeted'].append(p_unt)
-            results_dist[mult]['targeted'].append(p_tar)
+            # 3. Valutazione Matematica
+            with torch.no_grad():
+                adv_logits = wrapped_model(x_adv_tensor)
+                adv_preds = torch.argmax(adv_logits, dim=1)
+                
+                diffs = torch.abs(x_adv_tensor - x_clean_tensor)
+                l_infs = torch.amax(diffs, dim=(1, 2, 3)).cpu().numpy()
+                
+                # Successo = la rete predice la least-likely class!
+                success_np = (adv_preds == y_target_tensor).cpu().numpy()
             
-            print(f"Eps: {eps:.2f} | 🔴 Target: {p_tar*100:5.2f}% | 🟡 Untarg: {p_unt*100:5.2f}% | 🟢 Resist: {p_res*100:5.2f}%")
+            l_min = l_infs.min()
+            l_mean = l_infs.mean()
+            l_median = np.median(l_infs)
+            l_p95 = np.percentile(l_infs, 95)
+            l_max = l_infs.max()
+            
+            within_budget_mask = l_infs <= BUDGET_LINF
+            num_within_budget = within_budget_mask.sum()
+            
+            successful_and_legal_mask = within_budget_mask & success_np
+            num_success_legal = successful_and_legal_mask.sum()
+            
+            targeted_asr = num_success_legal / total_samples
+            
+            plot_data[lr]['iters'].append(steps)
+            plot_data[lr]['acc'].append(targeted_asr * 100) # Salviamo la Targeted ASR (%)
+            plot_data[lr]['linf'].append(l_max) # Meglio plottare il MAX per garantire il budget
+            
+            stats_str = (
+                f"   Linf stats: min={l_min:.4f}, mean={l_mean:.4f}, median={l_median:.4f}, max={l_max:.4f}\n"
+                f"   Within budget (<= {BUDGET_LINF}): {num_within_budget}/{total_samples} ({(num_within_budget/total_samples)*100:.2f}%)\n"
+                f"   Targeted successes within budget: {num_success_legal}/{total_samples} ({(num_success_legal/total_samples)*100:.2f}%)\n"
+                f"-> Risultato: Targeted ASR (per eps <= {BUDGET_LINF}) = {targeted_asr*100:.2f}%\n"
+                f"-> Tempo impiegato: {gen_time:.2f} secondi\n"
+            )
+            print(stats_str, end="")
+            
+            with open(txt_log_path, 'a') as f:
+                f.write(log_str + "\n")
+                f.write(stats_str)
+                
+            # EARLY STOPPING (Se abbiamo raggiunto il 100% di t-ASR)
+            if targeted_asr == 1.0:
+                msg = f"   [!] Targeted ASR arrivato al 100%. Salto max_iter successivi per questo LR per risparmiare tempo.\n"
+                print(msg)
+                with open(txt_log_path, 'a') as f:
+                    f.write(msg)
+                    
+                # Riempiamo i valori mancanti per il grafico
+                remaining_iters = len(max_iters_list) - len(plot_data[lr]['acc'])
+                plot_data[lr]['acc'].extend([100.0] * remaining_iters)
+                plot_data[lr]['linf'].extend([l_max] * remaining_iters)
+                
+                plot_data[lr]['early_stopped'] = True
+                break 
 
-    # =========================================================================
-    # FASE 3: GENERAZIONE DEL GRAFICO (Subplots con Barre Impilate)
-    # =========================================================================
-    print("\n[FASE 3] Generazione Grafico a Barre Impilate...")
+    # --- FASE 3: GENERAZIONE GRAFICO COMPARATIVO ---
+    print("\n[FASE 3] Generazione Grafico di Scouting...")
     
-    num_mults = len(step_multipliers)
-    fig, axes = plt.subplots(1, num_mults, figsize=(6 * num_mults, 7), sharey=True)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6.5))
     
-    # Colori allineati al grafico BIM del collega
-    color_resisted = 'forestgreen'
-    color_untargeted = 'gold'
-    color_targeted = 'firebrick'
+    unique_lrs = sorted(list(set(learning_rates)))
+    colors = sns.color_palette("tab10", n_colors=len(unique_lrs))
+    markers = ['o', 's', '^', 'D', 'v', 'p']
     
-    x_positions = np.arange(len(epsilons))
-    bar_width = 0.6
+    global_handles = []
+    global_labels = []
     
-    for i, mult in enumerate(step_multipliers):
-        ax = axes[i] if num_mults > 1 else axes
+    for i, lr in enumerate(unique_lrs):
+        iters = plot_data[lr]['iters']
+        if not iters: continue 
         
-        y_res = np.array(results_dist[mult]['resisted']) * 100
-        y_unt = np.array(results_dist[mult]['untargeted']) * 100
-        y_tar = np.array(results_dist[mult]['targeted']) * 100
+        accs = plot_data[lr]['acc']
+        linfs = plot_data[lr]['linf']
+        is_stopped = plot_data[lr]['early_stopped']
         
-        bar1 = ax.bar(x_positions, y_res, bar_width, label='Model Resisted', color=color_resisted, edgecolor='white')
-        bar2 = ax.bar(x_positions, y_unt, bar_width, bottom=y_res, label='Untargeted Success', color=color_untargeted, edgecolor='white')
-        bar3 = ax.bar(x_positions, y_tar, bar_width, bottom=y_res+y_unt, label='Targeted Success', color=color_targeted, edgecolor='white')
+        color = colors[i]
+        marker = markers[i % len(markers)]
         
-        # Testi dentro le barre
-        for j in range(len(epsilons)):
-            if y_res[j] > 4:
-                ax.text(x_positions[j], y_res[j]/2, f"{y_res[j]:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=10)
-            if y_unt[j] > 4:
-                # Scritta nera sul giallo per maggiore leggibilità
-                ax.text(x_positions[j], y_res[j] + y_unt[j]/2, f"{y_unt[j]:.1f}%", ha='center', va='center', color='black', fontweight='bold', fontsize=10)
-            if y_tar[j] > 4:
-                ax.text(x_positions[j], y_res[j] + y_unt[j] + y_tar[j]/2, f"{y_tar[j]:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=10)
+        line1, = ax1.plot(iters, accs, marker=marker, linewidth=2.5, markersize=8, color=color)
+        line2, = ax2.plot(iters, linfs, marker=marker, linewidth=2.5, markersize=8, color=color)
+        
+        global_handles.append(line1)
+        global_labels.append(f'LR = {lr}')
+        
+        if is_stopped:
+            last_iter = iters[-1]
+            last_acc = accs[-1]
+            last_linf = linfs[-1]
+            
+            ax1.scatter(last_iter, last_acc, marker='*', s=350, color=color, edgecolor='black', linewidth=1.5, zorder=5)
+            ax2.scatter(last_iter, last_linf, marker='*', s=350, color=color, edgecolor='black', linewidth=1.5, zorder=5)
+            ax1.annotate("100%", (last_iter, last_acc), textcoords="offset points", xytext=(0, -20), ha='center', color=color, fontweight='bold', fontsize=10)
 
-        ax.set_title(f"Step Multiplier: {mult}", fontsize=14, fontweight='bold')
-        ax.set_xticks(x_positions)
-        ax.set_xticklabels([f"{e:.2f}" for e in epsilons], fontsize=12)
-        ax.set_xlabel(r'Perturbation Budget ($\epsilon$)', fontsize=13)
-        ax.grid(axis='y', linestyle='--', alpha=0.7)
-
-    if num_mults > 1:
-        axes[0].set_ylabel('Percentage of Test Set (%)', fontsize=14)
-    else:
-        axes.set_ylabel('Percentage of Test Set (%)', fontsize=14)
-
-    # Legenda globale in alto
-    handles, labels = ax.get_legend_handles_labels()
-    fig.legend(handles[::-1], labels[::-1], loc='upper center', bbox_to_anchor=(0.5, 1.08), ncol=3, fontsize=12)
+    # Estetica Ax1 (ASR)
+    ax1.set_title("Targeted ASR (Least-Likely) vs. Max Iterations", fontsize=14, fontweight='bold')
+    ax1.set_xlabel("Max Iterations (steps)", fontsize=12)
+    ax1.set_ylabel("Targeted ASR (%)", fontsize=12)
+    ax1.set_xticks(max_iters_list)
+    ax1.set_xticklabels(max_iters_list, rotation=45) 
+    ax1.set_ylim(-5, 105)
     
-    plt.suptitle(f"PGD Targeted Distribution Analysis (Least-Likely, max_iter={BEST_MAX_ITER})", fontsize=18, fontweight='bold', y=1.15)
+    # Estetica Ax2 (L_inf)
+    ax2.set_title(r"Max $L_\infty$ Perturbation vs. Max Iterations", fontsize=14, fontweight='bold')
+    ax2.set_xlabel("Max Iterations (steps)", fontsize=12)
+    ax2.set_ylabel(r"Max $L_\infty$ Norm", fontsize=12)
+    ax2.set_xticks(max_iters_list)
+    ax2.set_xticklabels(max_iters_list, rotation=45) 
     
-    save_path = plots_dir / "pgd_targeted_distribution_tuning10.png"
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    line_budget = ax2.axhline(y=BUDGET_LINF, color='black', linestyle='--', linewidth=1.5, alpha=0.7)
+    global_handles.append(line_budget)
+    global_labels.append(f"Max Budget ({BUDGET_LINF})")
     
-    print(f"✅ Grafico a Barre Impilate salvato in: {save_path}")
-    return 0
+    num_cols = min(6, len(global_labels))
+    fig.legend(global_handles, global_labels, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=num_cols, fontsize=11, frameon=True)
+    
+    plt.suptitle("Carlini & Wagner Targeted: Hyperparameter Tuning (Worst-Case LLC)", fontsize=18, y=1.02)
+    plt.tight_layout() 
+    
+    plot_path = output_dir / "cw_targeted_tuning_analysis.png"
+    plt.savefig(plot_path, bbox_inches='tight', dpi=300)
+    print(f"-> Grafico salvato in: {plot_path}")
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

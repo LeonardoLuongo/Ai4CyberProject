@@ -1,4 +1,4 @@
-REPORT SCOUTING CARLINI & WAGNER TARGETED (LLC)
+REPORT SCOUTING CARLINI & WAGNER TARGETED (LLC SU 8631 CLASSI)
 Campioni testati: 100
 Budget Massimo L_inf: 0.1
 
@@ -7,61 +7,23 @@ Budget Massimo L_inf: 0.1
 Inizio test per LEARNING RATE = 0.005
 ==================================================
 
+Generazione C&W con max_iter=5, lr=0.005...
+   Linf stats: min=0.0000, mean=0.0000, median=0.0000, max=0.0000
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Targeted successes within budget: 0/100 (0.00%)
+-> Risultato: Targeted ASR (per eps <= 0.1) = 0.00%
+-> Tempo impiegato: 4.82 secondi
+
 Generazione C&W con max_iter=10, lr=0.005...
-   Linf stats: min=0.0000, mean=0.0010, median=0.0000, p95=0.0009, max=0.0249
+   Linf stats: min=0.0000, mean=0.0010, median=0.0000, max=0.0249
    Within budget (<= 0.1): 100/100 (100.00%)
    Targeted successes within budget: 5/100 (5.00%)
 -> Risultato: Targeted ASR (per eps <= 0.1) = 5.00%
--> Tempo impiegato: 16.79 secondi
+-> Tempo impiegato: 18.96 secondi
 
 Generazione C&W con max_iter=25, lr=0.005...
-   Linf stats: min=0.0000, mean=0.0224, median=0.0224, p95=0.0419, max=0.0478
+   Linf stats: min=0.0000, mean=0.0224, median=0.0224, max=0.0478
    Within budget (<= 0.1): 100/100 (100.00%)
    Targeted successes within budget: 89/100 (89.00%)
 -> Risultato: Targeted ASR (per eps <= 0.1) = 89.00%
--> Tempo impiegato: 267.72 secondi
-
-Generazione C&W con max_iter=50, lr=0.005...
-   Linf stats: min=0.0108, mean=0.0197, median=0.0186, p95=0.0309, max=0.0384
-   Within budget (<= 0.1): 100/100 (100.00%)
-   Targeted successes within budget: 100/100 (100.00%)
--> Risultato: Targeted ASR (per eps <= 0.1) = 100.00%
--> Tempo impiegato: 418.34 secondi
-   [!] Targeted ASR arrivato al 100%. Salto max_iter successivi per questo LR per risparmiare tempo.
-
-==================================================
-Inizio test per LEARNING RATE = 0.01
-==================================================
-
-Generazione C&W con max_iter=10, lr=0.01...
-   Linf stats: min=0.0000, mean=0.0210, median=0.0200, p95=0.0497, max=0.0503
-   Within budget (<= 0.1): 100/100 (100.00%)
-   Targeted successes within budget: 52/100 (52.00%)
--> Risultato: Targeted ASR (per eps <= 0.1) = 52.00%
--> Tempo impiegato: 91.96 secondi
-
-Generazione C&W con max_iter=25, lr=0.01...
-   Linf stats: min=0.0171, mean=0.0294, median=0.0280, p95=0.0411, max=0.0539
-   Within budget (<= 0.1): 100/100 (100.00%)
-   Targeted successes within budget: 100/100 (100.00%)
--> Risultato: Targeted ASR (per eps <= 0.1) = 100.00%
--> Tempo impiegato: 269.82 secondi
-   [!] Targeted ASR arrivato al 100%. Salto max_iter successivi per questo LR per risparmiare tempo.
-
-==================================================
-Inizio test per LEARNING RATE = 0.05
-==================================================
-
-Generazione C&W con max_iter=10, lr=0.05...
-   Linf stats: min=0.0500, mean=0.1377, median=0.1473, p95=0.1505, max=0.1943
-   Within budget (<= 0.1): 14/100 (14.00%)
-   Targeted successes within budget: 14/100 (14.00%)
--> Risultato: Targeted ASR (per eps <= 0.1) = 14.00%
--> Tempo impiegato: 24.84 secondi
-
-Generazione C&W con max_iter=25, lr=0.05...
-   Linf stats: min=0.0304, mean=0.1037, median=0.1116, p95=0.1487, max=0.1494
-   Within budget (<= 0.1): 50/100 (50.00%)
-   Targeted successes within budget: 50/100 (50.00%)
--> Risultato: Targeted ASR (per eps <= 0.1) = 50.00%
--> Tempo impiegato: 235.13 secondi
+-> Tempo impiegato: 328.20 secondi

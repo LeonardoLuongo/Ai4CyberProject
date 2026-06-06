@@ -1,6 +1,7 @@
 *.png
 *.jpg
 *.jpeg
+*.tiff
 **digest**
 **.pyc
 google_credentials.json
