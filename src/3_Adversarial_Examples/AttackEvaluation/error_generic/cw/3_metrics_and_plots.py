@@ -109,7 +109,29 @@ def main():
     # =========================================================
     print(f"\n[BLOCCO 2] Generazione Grafici Globali e Logging...")
     
-    epsilons = [0.0, 0.025, 0.05, 0.075, 0.10, 0.15, 0.20]
+    # ---------------------------------------------------------
+    # NUOVO CALCOLO DINAMICO DEGLI EPSILON (BASATO SUI PERCENTILI)
+    # ---------------------------------------------------------
+    successful_attacks = df[df['adv_pred_class'] != df['clean_pred_class']]
+    
+    if not successful_attacks.empty:
+        # Calcoliamo 6 percentili: 0%, 20%, 40%, 60%, 80%, 100% della distribuzione del rumore
+        percentiles = np.linspace(0, 100, 6)
+        epsilons_raw = np.percentile(successful_attacks['linf'], percentiles).tolist()
+    else:
+        print("Attenzione: Nessun attacco ha avuto successo. Uso default.")
+        epsilons_raw = [0.0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.20]
+        
+    # Usiamo 8 cifre decimali! Questo impedisce che i micro-rumori di C&W 
+    # vengano arrotondati allo stesso numero e cancellati dal set()
+    epsilons = [0.0] + [round(e, 8) for e in epsilons_raw] + [round(epsilons_raw[-1] + 0.001, 8)]
+    
+    # Rimuove eventuali veri duplicati e riordina dal più piccolo al più grande
+    epsilons = sorted(list(set(epsilons))) 
+    
+    print(f"-> Epsilon calcolati dinamicamente (Percentili): {epsilons}")
+    # ---------------------------------------------------------
+
     asr_dict = {"C&W L_inf (Untargeted)": []}
     confidence_data = []
     
@@ -144,7 +166,7 @@ def main():
                 robust_accuracy=robust_accuracy,
                 targeted_asr=0.0,
                 untargeted_asr=untargeted_asr,
-                notes="Valutazione Untargeted TIFF 32-bit"
+                notes="Valutazione Untargeted TIFF 32-bit (Eps Dinamico)"
             )
 
     plot_security_evaluation_curves(epsilons, asr_dict, "NN1 (FaceNet)", True, str(output_eval_dir / "robust_accuracy_curve.png"))
@@ -155,18 +177,27 @@ def main():
     # =========================================================
     print(f"\n[BLOCCO 3] Generazione Visual Showcase per Epsilon...")
     
-    for eps in epsilons:
+    # Calcoliamo uno "step" tollerato per la ricerca delle immagini, 
+    # siccome gli epsilon ora variano, un 0.02 fisso potrebbe non andare bene.
+    eps_step = epsilons[1] - epsilons[0] if len(epsilons) > 1 else 0.05
+    tolerance = eps_step * 0.9 # Cerchiamo sample nel range del 90% dello step corrente
+
+    for i, eps in enumerate(epsilons):
         if eps == 0.0: continue 
         
-        # Scegliamo immagini che C&W è riuscito a violare posizionandosi vicinissimo a questo limite
+        # Il limite inferiore di ricerca ora è basato sullo step dinamico
+        lower_bound = epsilons[i-1] 
+        
+        # Scegliamo immagini che C&W è riuscito a violare posizionandosi all'interno di questo step
         suitable_samples = df[
             (df['adv_pred_class'] != df['clean_pred_class']) & 
             (df['linf'] <= eps) & 
-            (df['linf'] > (eps - 0.02))
+            (df['linf'] > lower_bound)
         ]
         
         if not suitable_samples.empty:
-            sample = suitable_samples.iloc[0]
+            # Prendiamo il campione con L_inf più alto (il più vicino al limite eps)
+            sample = suitable_samples.sort_values(by='linf', ascending=False).iloc[0]
             
             # Entrambi TIFF 32-bit!
             c_bgr_float32 = cv2.imread(str(base_dir / sample['source_image_path']), cv2.IMREAD_UNCHANGED)
@@ -178,7 +209,7 @@ def main():
             c_rgb = cv2.cvtColor(c_bgr_float32, cv2.COLOR_BGR2RGB)
             a_rgb = cv2.cvtColor(a_bgr_float32, cv2.COLOR_BGR2RGB)
 
-            eps_str_fmt = f"{eps:.3f}".replace('.', '_')
+            eps_str_fmt = f"{eps:.4f}".replace('.', '_')
             
             # plot_adversarial_showcase calcolerà un rumore perfetto grazie ai float32!
             plot_adversarial_showcase(
@@ -188,7 +219,7 @@ def main():
             )
             plot_frequency_spectrum(c_rgb, a_rgb, True, str(progression_dir / f"spectrum_eps_limit_{eps_str_fmt}.png"))
         else:
-            print(f" -> [SKIP] Nessun campione rappresentativo C&W trovato vicino a L_inf = {eps:.3f}")
+            print(f" -> [SKIP] Nessun campione rappresentativo C&W trovato tra {lower_bound:.4f} e {eps:.4f}")
 
     print("\n[OK] Pipeline di Evaluation C&W Error-Generic conclusa con successo!")
 
