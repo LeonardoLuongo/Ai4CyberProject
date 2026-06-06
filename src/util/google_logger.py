@@ -89,7 +89,7 @@ if __name__ == "__main__":
     
     # Esempio di riga che verrà scritta
     logger.log_biometric_metrics(
-        tester="Francesco",
+        tester="Andrea",
         phase="Test Logger",
         attack_type="None",
         epsilon=0.0,

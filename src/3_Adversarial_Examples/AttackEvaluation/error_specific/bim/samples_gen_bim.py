@@ -1,4 +1,5 @@
 import sys
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -31,21 +32,6 @@ def project_relative_path(path: Path, base_dir: Path) -> str:
         return str(path)
 
 
-def save_rgb_image(path: Path, image_hwc_01: np.ndarray) -> None:
-    """Salva in modo robusto su Windows anche con path Unicode."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    image_hwc_01 = np.asarray(image_hwc_01)
-    if image_hwc_01.ndim != 3 or image_hwc_01.shape[2] != 3:
-        raise ValueError(f"shape immagine non valida: {image_hwc_01.shape}")
-
-    image_uint8 = np.rint(np.clip(image_hwc_01, 0.0, 1.0) * 255.0).astype(np.uint8)
-    Image.fromarray(image_uint8).save(path)
-
-    if not path.exists() or path.stat().st_size == 0:
-        raise OSError(f"file non creato correttamente: {path}")
-
-
 def main():
     print("======================================================")
     print(" GENERATORE CAMPIONI: BIM TARGETED (BULLETPROOF SAVE) ")
@@ -59,7 +45,7 @@ def main():
     csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
     meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
     
-    output_base_dir = base_dir / "dataset" / "attacks" / "error_specific" / "bim"
+    output_base_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_specific" / "bim"
     cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"
     
     epsilons = [0.025, 0.05, 0.075, 0.10, 0.15, 0.20]
@@ -97,10 +83,11 @@ def main():
     print(f"-> Trovate {len(df_clean)} immagini totali nel manifest.")
 
     # =========================================================================
-    # FASE 1: MTCNN E SCREMATURA (Salvataggio Fisico Controllato)
+    # FASE 1: MTCNN E SCREMATURA (Filtro Zero-Shot e Cache TIFF 32-bit)
     # =========================================================================
     print("\n[FASE 1] Ritaglio MTCNN, Scrematura e Salvataggio Clean Cropped...")
     valid_records = []
+    cached_count = 0
     
     with torch.no_grad():
         for index, row in tqdm(df_clean.iterrows(), total=len(df_clean), desc="Pre-Inferenza"):
@@ -110,7 +97,35 @@ def main():
                 
             source_img_path = base_dir / row['image_path']
             identity_dir_name = source_img_path.parent.name
-            img_filename = source_img_path.name
+            img_filename = f"{source_img_path.stem}.tiff"
+
+            out_crop_dir = cropped_clean_dir / identity_dir_name
+            out_crop_dir.mkdir(parents=True, exist_ok=True)
+            crop_save_path = out_crop_dir / img_filename
+
+            row_dict = row.to_dict()
+            row_dict['true_facenet_id'] = facenet_id
+            row_dict['cropped_image_path'] = crop_save_path.relative_to(base_dir).as_posix()
+
+            # I TIFF in cache sono float32 BGR nel range [0, 1].
+            if crop_save_path.exists():
+                img_bgr_float32 = cv2.imread(str(crop_save_path), cv2.IMREAD_UNCHANGED)
+                if img_bgr_float32 is None:
+                    continue
+                img_rgb_float32 = cv2.cvtColor(img_bgr_float32, cv2.COLOR_BGR2RGB)
+                x_clean = np.expand_dims(
+                    np.transpose(img_rgb_float32.astype(np.float32), (2, 0, 1)),
+                    axis=0,
+                )
+
+                clean_tensor = torch.from_numpy(x_clean).to(device)
+                clean_logits = resnet(clean_tensor * 2.0 - 1.0).cpu().numpy()
+
+                row_dict['clean_logits'] = clean_logits
+                row_dict['x_clean'] = x_clean
+                valid_records.append(row_dict)
+                cached_count += 1
+                continue
                 
             try:
                 img_pil = Image.open(str(source_img_path)).convert('RGB')
@@ -131,29 +146,26 @@ def main():
                 
                 np_img_01 = np.clip((best_face_tensor.cpu().numpy() + 1.0) / 2.0, 0.0, 1.0)
                 x_clean = np.expand_dims(np_img_01, axis=0) 
-                
-                out_crop_dir = cropped_clean_dir / identity_dir_name
-                out_crop_dir.mkdir(parents=True, exist_ok=True)
-                crop_save_path = out_crop_dir / img_filename
-                
-                img_c_plot = np.transpose(np_img_01, (1, 2, 0))
-                try:
-                    save_rgb_image(crop_save_path, img_c_plot)
-                except Exception as exc:
+
+                img_c_bgr_float32 = cv2.cvtColor(
+                    np.transpose(np_img_01, (1, 2, 0)).astype(np.float32),
+                    cv2.COLOR_RGB2BGR,
+                )
+                if not cv2.imwrite(str(crop_save_path), img_c_bgr_float32):
                     rel_crop_path = project_relative_path(crop_save_path, base_dir)
-                    print(f"\n[ERRORE FATALE] Impossibile salvare foto clean in: {rel_crop_path} -> {exc}")
+                    print(f"\n[ERRORE FATALE] Impossibile salvare clean TIFF: {rel_crop_path}")
                     continue
                 
-                row_dict = row.to_dict()
-                row_dict['true_facenet_id'] = facenet_id
                 row_dict['clean_logits'] = np.expand_dims(best_logits, axis=0) 
                 row_dict['x_clean'] = x_clean 
-                row_dict['cropped_image_path'] = crop_save_path.relative_to(base_dir).as_posix() 
                 
                 valid_records.append(row_dict)
 
     total_valid = len(valid_records)
-    print(f"-> Immagini d'oro pronte per l'attacco: {total_valid}")
+    print(
+        f"-> Immagini d'oro pronte per l'attacco: {total_valid} "
+        f"({cached_count} caricate da cache TIFF)"
+    )
 
     # =========================================================================
     # FASE 2: GENERAZIONE DEGLI ATTACCHI (BATCH DIRETTO)
@@ -232,14 +244,16 @@ def main():
                     out_img_dir = eps_dir / identity_dir_name
                     out_img_dir.mkdir(parents=True, exist_ok=True)
                     
-                    adv_filename = f"{orig_filename}.jpg"
+                    adv_filename = f"{orig_filename}.tiff"
                     adv_save_path = out_img_dir / adv_filename
                     
-                    try:
-                        save_rgb_image(adv_save_path, img_a_plot)
-                    except Exception as exc:
+                    img_a_bgr_float32 = cv2.cvtColor(
+                        img_a_plot.astype(np.float32),
+                        cv2.COLOR_RGB2BGR,
+                    )
+                    if not cv2.imwrite(str(adv_save_path), img_a_bgr_float32):
                         rel_adv_path = project_relative_path(adv_save_path, base_dir)
-                        print(f"\n[ERRORE FATALE] Impossibile salvare l'attacco in: {rel_adv_path} -> {exc}")
+                        print(f"\n[ERRORE FATALE] Impossibile salvare adversarial TIFF: {rel_adv_path}")
                         continue
 
                     rel_source = row['cropped_image_path'] # Questo è già corretto e relativo
@@ -264,7 +278,7 @@ def main():
             df_tracker = pd.DataFrame(eps_tracker_records)
             df_tracker.to_csv(eps_dir / f"tracker_{eps_str}.csv", index=False)
         
-    print("\n[OK] Processo BIM Targeted completato con successo e immagini salvate!")
+    print("\n[OK] Processo BIM Targeted completato con successo e immagini TIFF salvate via OpenCV!")
 
 if __name__ == "__main__":
     main()
