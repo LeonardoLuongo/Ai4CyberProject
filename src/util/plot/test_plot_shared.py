@@ -1,10 +1,16 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "0" 
+
 import numpy as np
 import cv2
 import torch
 import torch.nn as nn
+
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+
 from facenet_pytorch import InceptionResnetV1
 from art.estimators.classification import PyTorchClassifier
 from art.attacks.evasion import FastGradientMethod

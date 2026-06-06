@@ -71,7 +71,7 @@ def plot_target_confidence_growth(epsilons: list,
     # Palette verde/blu ascendente per indicare il "guadagno" dell'attaccante
     sns.boxplot(data=target_confidence_data, palette="YlGnBu")
     
-    plt.xticks(ticks=range(len(epsilons)), labels=[f"{eps:.2f}" for eps in epsilons])
+    plt.xticks(ticks=range(len(epsilons)), labels=[f"{eps:.4f}" for eps in epsilons])
     
     plt.title(f"Target Class Confidence Growth\nAttack: {attack_name}", fontsize=16, pad=15)
     plt.xlabel(r"Perturbation Budget ($L_\infty$ $\epsilon$)", fontsize=14)

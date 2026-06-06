@@ -85,7 +85,7 @@ def plot_confidence_degradation(epsilons: list,
     sns.boxplot(data=confidence_data, palette="YlOrRd")
     
     # Sovrascriviamo le etichette dell'asse X con i valori di Epsilon
-    plt.xticks(ticks=range(len(epsilons)), labels=[f"{eps:.2f}" for eps in epsilons])
+    plt.xticks(ticks=range(len(epsilons)), labels=[f"{eps:.4f}" for eps in epsilons])
     
     plt.title(f"Confidence Degradation on True Class\nAttack: {attack_name}", fontsize=16, pad=15)
     plt.xlabel(r"Perturbation Budget ($L_\infty$ $\epsilon$)", fontsize=14)
