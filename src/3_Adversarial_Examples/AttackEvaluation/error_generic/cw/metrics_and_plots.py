@@ -29,7 +29,7 @@ def main():
     # BLOCCO 0: SETUP E CARICAMENTO CSV
     # =========================================================
     base_dir = Path.cwd()
-    tracker_csv_path = base_dir / "dataset" / "attacks" / "error_generic" / "cw" / "tracker_cw_untargeted.csv"
+    tracker_csv_path = base_dir / "dataset" / "attacks" / "NN1" / "error_generic" / "cw" / "tracker_cw_untargeted.csv"
     output_eval_dir = base_dir / "plots" / "3_Adversarial_Examples" / "error_generic" / "cw"
     
     progression_dir = output_eval_dir / "visual_progression"

@@ -25,7 +25,7 @@ def main():
     base_dir = Path.cwd()
     csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
     meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
-    output_base_dir = base_dir / "dataset" / "attacks" / "error_generic" / "cw"
+    output_base_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_generic" / "cw"
     
     # Cartella di caching per i volti puliti già estratti
     cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"
