@@ -35,10 +35,11 @@ def plot_adversarial_showcase(clean_img: np.ndarray, adv_img: np.ndarray,
     adv_img_f = adv_img.astype(np.float32) / 255.0 if adv_img.max() > 1.0 else adv_img.copy()
 
     # Calcolo del rumore e amplificazione per visibilità
-    amp_fact = 10
-    amp_coeff = 0.5
-    noise = adv_img_f - clean_img_f
-    noise_visual = np.clip((noise * amp_fact) + amp_coeff, 0, 1)
+    amp_fact = 30.0
+    
+    # FIX: Aggiunto np.abs() per prendere il valore assoluto della perturbazione!
+    noise = np.abs(adv_img_f - clean_img_f)
+    noise_visual = np.clip(noise * amp_fact, 0, 1)
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
@@ -49,7 +50,7 @@ def plot_adversarial_showcase(clean_img: np.ndarray, adv_img: np.ndarray,
 
     # 2. Rumore Amplificato
     axes[1].imshow(noise_visual)
-    axes[1].set_title(f"Perturbation (noise x {amp_fact}) + {amp_coeff}\nMax L_inf: {np.max(np.abs(noise)):.4f}")
+    axes[1].set_title(f"Perturbation (noise x {int(amp_fact)})\nMax L_inf: {np.max(noise):.4f}")
     axes[1].axis('off')
 
     # 3. Avversario
@@ -60,6 +61,7 @@ def plot_adversarial_showcase(clean_img: np.ndarray, adv_img: np.ndarray,
 
     plt.suptitle("Adversarial Attack Showcase", fontsize=16, y=1.05)
     save_or_show(save_flag, save_path)
+
 
 
 def plot_frequency_spectrum(clean_img: np.ndarray, adv_img: np.ndarray, save_flag: bool = False, save_path: str = None):

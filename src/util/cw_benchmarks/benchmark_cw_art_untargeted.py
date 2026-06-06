@@ -18,6 +18,7 @@ from art.attacks.evasion import CarliniLInfMethod
 
 # Importiamo la nuova classe automatica
 from util.cw_custom import PyTorchCarliniLInf_EarlyStop, PyTorchCarliniLInf_BinarySteps, PyTorchCarliniLInf_ARTMatch
+from util.cw_benchmarks.cw_pytorch import CarliniLInfMethodPyTorch
 
 # ==========================================
 # WRAPPERS
@@ -174,31 +175,35 @@ def main():
     linf_full = float(torch.amax(torch.abs(adv_full - sample_img_01)).cpu())
     succ_full = (int(torch.argmax(wrapped_model_full(adv_full), dim=1).cpu()[0]) != true_facenet_id)
     
-    # --- TEST 3: CUSTOM AUTO TEMP SCALING (UNTARGETED) ---
-    print("-> Esecuzione 3: Custom C&W (ART Match)...")
-    attack_auto = PyTorchCarliniLInf_ARTMatch(model=wrapped_model_spliced, targeted=False, max_iter=50)
-    t0 = time.time()
-    adv_auto = attack_auto.forward(image=sample_img_01, label=local_y)
-    time_auto = time.time() - t0
-    linf_auto = float(torch.amax(torch.abs(adv_auto - sample_img_01)).cpu())
-    succ_auto = (int(torch.argmax(wrapped_model_full(adv_auto), dim=1).cpu()[0]) != true_facenet_id)
-
-    # --- TEST 4: LIBRERIA ART (UNTARGETED) ---
-    print("-> Esecuzione 4: Libreria ART (SOTA)...")
+    # --- TEST 3: CUSTOM ART CLONE (UNTARGETED) ---
+    print("-> Esecuzione 3: Custom C&W (ART Clone)...")
     loss_fn = nn.CrossEntropyLoss()
     classifier_art = PyTorchClassifier(model=wrapped_model_full, clip_values=(0.0, 1.0), loss=loss_fn, input_shape=(3, 160, 160), nb_classes=8631, device_type='gpu' if torch.cuda.is_available() else 'cpu')
     
-    # targeted=False in ART
-    attack_art = CarliniLInfMethod(classifier=classifier_art, targeted=False, max_iter=50, learning_rate=0.01, initial_const=1e-3, largest_const=20.0)
-    x_np = sample_img_01.cpu().numpy()
-    
     # Quando targeted=False, y rappresenta l'etichetta originaria
+    x_np = sample_img_01.cpu().numpy()
     y_true_np = np.array([true_facenet_id])
+
+    art_clone = CarliniLInfMethodPyTorch(classifier=classifier_art, targeted=False, max_iter=5, learning_rate=0.01, initial_const=1e-3, largest_const=20.0)
+    t0 = time.time()
+    adv_cln = art_clone.generate(x=x_np, y=y_true_np)
+    time_cln = time.time() - t0  # Rinomato in time_cln per coerenza
+    linf_cln = np.max(np.abs(adv_cln - x_np))
+    
+    adv_cln_tensor = torch.tensor(adv_cln).to(device)
+    succ_cln = (int(torch.argmax(wrapped_model_full(adv_cln_tensor), dim=1).cpu()[0]) != true_facenet_id)
+
+    # --- TEST 4: LIBRERIA ART (UNTARGETED) ---
+    print("-> Esecuzione 4: Libreria ART (SOTA)...")
+    
+    # targeted=False in ART
+    attack_art = CarliniLInfMethod(classifier=classifier_art, targeted=False, max_iter=5, learning_rate=0.01, initial_const=1e-3, largest_const=20.0)
     
     t0 = time.time()
     adv_art_np = attack_art.generate(x=x_np, y=y_true_np)
     time_art = time.time() - t0
     linf_art = np.max(np.abs(adv_art_np - x_np))
+    
     adv_art_tensor = torch.tensor(adv_art_np).to(device)
     succ_art = (int(torch.argmax(wrapped_model_full(adv_art_tensor), dim=1).cpu()[0]) != true_facenet_id)
 
@@ -206,15 +211,17 @@ def main():
     print("\n======================================================")
     print(" SOMMARIO DEI RISULTATI GLOBALI (UNTARGETED) ")
     print("======================================================")
-    print(f"Metodo       | Tempo (s) | L_inf Dist | Successo")
-    print(f"Custom (ES)  | {time_es:9.2f} | {linf_es:10.4f} | {succ_es}")
-    print(f"Custom (BinS)| {time_full:9.2f} | {linf_full:10.4f} | {succ_full}")
-    print(f"Custom (Full)| {time_auto:9.2f} | {linf_auto:10.4f} | {succ_auto}")
-    print(f"ART (SOTA)   | {time_art:9.2f} | {linf_art:10.4f} | {succ_art}")
+    print(f"Metodo        | Tempo (s) | L_inf Dist | Successo")
+    print(f"Custom (ES)   | {time_es:9.2f} | {linf_es:10.4f} | {succ_es}")
+    print(f"Custom (BinS) | {time_full:9.2f} | {linf_full:10.4f} | {succ_full}")
+    print(f"Custom (Clone)| {time_cln:9.2f} | {linf_cln:10.4f} | {succ_cln}") # Aggiornata la label
+    print(f"ART (SOTA)    | {time_art:9.2f} | {linf_art:10.4f} | {succ_art}")
     print("======================================================")
 
     plot_path = str(out_dir / "global_benchmark_cw_v4_untargeted.png")
-    plot_benchmark_v4(x_np[0], adv_es.cpu().numpy()[0], adv_full.cpu().numpy()[0], adv_auto.cpu().numpy()[0], adv_art_np[0], plot_path)
+    
+    # FIX APPLICATO QUI: adv_cln è già numpy, basta estrarre l'indice 0
+    plot_benchmark_v4(x_np[0], adv_es.cpu().numpy()[0], adv_full.cpu().numpy()[0], adv_cln[0], adv_art_np[0], plot_path)
 
 if __name__ == "__main__":
     main()

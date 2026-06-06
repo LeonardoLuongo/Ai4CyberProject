@@ -123,7 +123,7 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
         diff_abs = torch.abs(x_adv - x)
         # Fix per batching: tau deve fare broadcast con (B, C, H, W)
         tau_view = tau.view(-1, 1, 1, 1)
-        loss_2 = torch.sum(torch.clamp(diff_abs - tau_view, min=0.0).view(x_adv.size(0), -1), dim=1)
+        loss_2 = torch.sum(torch.clamp(diff_abs - tau_view, min=0.0).reshape(x_adv.size(0), -1), dim=1)
 
         loss = loss_1 * const + loss_2
         return z_predicted, loss, loss_1, loss_2
@@ -141,7 +141,7 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
 
         diff_abs = torch.abs(x_adv - x)
         tau_view = tau.view(-1, 1, 1, 1)
-        loss_2 = torch.sum(torch.clamp(diff_abs - tau_view, min=0.0).view(x_adv.size(0), -1), dim=1)
+        loss_2 = torch.sum(torch.clamp(diff_abs - tau_view, min=0.0).reshape(x_adv.size(0), -1), dim=1)
 
         loss = loss_1 * const + loss_2
         return loss

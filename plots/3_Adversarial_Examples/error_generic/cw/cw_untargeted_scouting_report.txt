@@ -1,0 +1,151 @@
+REPORT SCOUTING CARLINI & WAGNER UNTARGETED (PURE-GPU)
+Campioni testati: 100
+Budget Massimo L_inf: 0.1
+
+
+==================================================
+Inizio test per LEARNING RATE = 1e-05
+==================================================
+
+Generazione C&W con max_iter=5, lr=1e-05...
+   Linf stats: min=0.0000, mean=0.0000, median=0.0000, p95=0.0000, max=0.0000
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 0/100 (0.00%)
+-> Risultato: Robust Accuracy = 100.00%
+-> Tempo impiegato: 4.95 secondi
+
+Generazione C&W con max_iter=10, lr=1e-05...
+   Linf stats: min=0.0000, mean=0.0000, median=0.0000, p95=0.0000, max=0.0001
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 1/100 (1.00%)
+-> Risultato: Robust Accuracy = 99.00%
+-> Tempo impiegato: 9.45 secondi
+
+Generazione C&W con max_iter=20, lr=1e-05...
+   Linf stats: min=0.0000, mean=0.0000, median=0.0000, p95=0.0000, max=0.0001
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 2/100 (2.00%)
+-> Risultato: Robust Accuracy = 98.00%
+-> Tempo impiegato: 17.71 secondi
+
+Generazione C&W con max_iter=50, lr=1e-05...
+   Linf stats: min=0.0000, mean=0.0000, median=0.0000, p95=0.0000, max=0.0003
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 5/100 (5.00%)
+-> Risultato: Robust Accuracy = 95.00%
+-> Tempo impiegato: 42.57 secondi
+
+Generazione C&W con max_iter=100, lr=1e-05...
+   Linf stats: min=0.0000, mean=0.0000, median=0.0000, p95=0.0005, max=0.0007
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 8/100 (8.00%)
+-> Risultato: Robust Accuracy = 92.00%
+-> Tempo impiegato: 84.34 secondi
+
+==================================================
+Inizio test per LEARNING RATE = 0.0001
+==================================================
+
+Generazione C&W con max_iter=5, lr=0.0001...
+   Linf stats: min=0.0000, mean=0.0000, median=0.0000, p95=0.0000, max=0.0003
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 5/100 (5.00%)
+-> Risultato: Robust Accuracy = 95.00%
+-> Tempo impiegato: 4.87 secondi
+
+Generazione C&W con max_iter=10, lr=0.0001...
+   Linf stats: min=0.0000, mean=0.0000, median=0.0000, p95=0.0004, max=0.0005
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 7/100 (7.00%)
+-> Risultato: Robust Accuracy = 93.00%
+-> Tempo impiegato: 9.03 secondi
+
+Generazione C&W con max_iter=20, lr=0.0001...
+   Linf stats: min=0.0000, mean=0.0001, median=0.0000, p95=0.0010, max=0.0011
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 15/100 (15.00%)
+-> Risultato: Robust Accuracy = 85.00%
+-> Tempo impiegato: 16.74 secondi
+
+Generazione C&W con max_iter=50, lr=0.0001...
+   Linf stats: min=0.0000, mean=0.0012, median=0.0000, p95=0.0030, max=0.0030
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 44/100 (44.00%)
+-> Risultato: Robust Accuracy = 56.00%
+-> Tempo impiegato: 40.75 secondi
+
+Generazione C&W con max_iter=100, lr=0.0001...
+   Linf stats: min=0.0000, mean=0.0035, median=0.0041, p95=0.0046, max=0.0062
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 88/100 (88.00%)
+-> Risultato: Robust Accuracy = 12.00%
+-> Tempo impiegato: 502.53 secondi
+
+==================================================
+Inizio test per LEARNING RATE = 0.001
+==================================================
+
+Generazione C&W con max_iter=5, lr=0.001...
+   Linf stats: min=0.0000, mean=0.0009, median=0.0000, p95=0.0025, max=0.0025
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 42/100 (42.00%)
+-> Risultato: Robust Accuracy = 58.00%
+-> Tempo impiegato: 4.51 secondi
+
+Generazione C&W con max_iter=10, lr=0.001...
+   Linf stats: min=0.0000, mean=0.0040, median=0.0051, p95=0.0051, max=0.0051
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 85/100 (85.00%)
+-> Risultato: Robust Accuracy = 15.00%
+-> Tempo impiegato: 19.19 secondi
+
+Generazione C&W con max_iter=20, lr=0.001...
+   Linf stats: min=0.0000, mean=0.0050, median=0.0051, p95=0.0077, max=0.0095
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 99/100 (99.00%)
+-> Risultato: Robust Accuracy = 1.00%
+-> Tempo impiegato: 122.06 secondi
+
+Generazione C&W con max_iter=50, lr=0.001...
+   Linf stats: min=0.0005, mean=0.0048, median=0.0051, p95=0.0075, max=0.0111
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Robust Accuracy = 0.00%
+-> Tempo impiegato: 215.34 secondi
+   [!] Accuracy crollata a 0.00%. Salto max_iter successivi per questo LR per risparmiare tempo.
+
+==================================================
+Inizio test per LEARNING RATE = 0.005
+==================================================
+
+Generazione C&W con max_iter=5, lr=0.005...
+   Linf stats: min=0.0025, mean=0.0050, median=0.0050, p95=0.0100, max=0.0125
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Robust Accuracy = 0.00%
+-> Tempo impiegato: 5.99 secondi
+   [!] Accuracy crollata a 0.00%. Salto max_iter successivi per questo LR per risparmiare tempo.
+
+==================================================
+Inizio test per LEARNING RATE = 0.01
+==================================================
+
+Generazione C&W con max_iter=5, lr=0.01...
+   Linf stats: min=0.0050, mean=0.0064, median=0.0050, p95=0.0100, max=0.0150
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Robust Accuracy = 0.00%
+-> Tempo impiegato: 5.92 secondi
+   [!] Accuracy crollata a 0.00%. Salto max_iter successivi per questo LR per risparmiare tempo.
+
+==================================================
+Inizio test per LEARNING RATE = 0.05
+==================================================
+
+Generazione C&W con max_iter=5, lr=0.05...
+   Linf stats: min=0.0250, mean=0.0250, median=0.0250, p95=0.0250, max=0.0250
+   Within budget (<= 0.1): 100/100 (100.00%)
+   Successful attacks within budget: 100/100 (100.00%)
+-> Risultato: Robust Accuracy = 0.00%
+-> Tempo impiegato: 4.82 secondi
+   [!] Accuracy crollata a 0.00%. Salto max_iter successivi per questo LR per risparmiare tempo.
