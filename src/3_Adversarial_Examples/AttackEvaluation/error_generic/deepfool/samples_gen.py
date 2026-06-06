@@ -26,7 +26,7 @@ def main():
     meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
     
     # Path di Output
-    output_base_dir = base_dir / "dataset" / "attacks" / "error_generic" / "deepfool"
+    output_base_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_generic" / "deepfool"
     cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"
     
     samples_dir = output_base_dir / "samples"

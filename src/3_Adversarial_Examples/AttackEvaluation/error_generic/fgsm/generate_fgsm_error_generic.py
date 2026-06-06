@@ -1,5 +1,6 @@
 import os
 import sys
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -35,7 +36,7 @@ def main():
     csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
     meta_csv_path = base_dir / "dataset" / "clean" / "splits" / "identity_meta.csv"
     
-    output_base_dir = base_dir / "dataset" / "attacks" / "error_generic" / "fgsm"
+    output_base_dir = base_dir / "dataset" / "attacks" / "NN1" / "error_generic" / "fgsm"
     cropped_clean_dir = base_dir / "dataset" / "clean_cropped" / "NN1"
     
     # Parametri classici FGSM (aggiungi o rimuovi in base alle tue necessità)
@@ -69,6 +70,7 @@ def main():
     # =========================================================================
     print("\n[FASE 1] Smart Cropping: Caricamento immagini esistenti o calcolo MTCNN...")
     valid_records = []
+    cached_count = 0
     
     with torch.no_grad():
         for index, row in tqdm(df_clean.iterrows(), total=len(df_clean), desc="Pre-Inferenza"):
@@ -78,7 +80,7 @@ def main():
                 
             source_img_path = base_dir / row['image_path']
             identity_dir_name = source_img_path.parent.name
-            img_filename = source_img_path.name
+            img_filename = f"{source_img_path.stem}.tiff"
                 
             out_crop_dir = cropped_clean_dir / identity_dir_name
             out_crop_dir.mkdir(parents=True, exist_ok=True)
@@ -86,15 +88,15 @@ def main():
             
             # --- LOGICA SMART: Se esiste, salta MTCNN e carica direttamente in RAM ---
             if crop_save_path.exists():
-                try:
-                    img_pil = Image.open(crop_save_path).convert('RGB')
-                    if img_pil.size != (160, 160):
-                        img_pil = img_pil.resize((160, 160), Image.Resampling.BILINEAR)
-                    
-                    np_img_01 = np.transpose(np.asarray(img_pil), (2, 0, 1)).astype(np.float32) / 255.0
-                    x_clean = np.expand_dims(np_img_01, axis=0)
-                except Exception:
-                    continue # Se l'immagine è corrotta, la salta
+                img_bgr_float32 = cv2.imread(str(crop_save_path), cv2.IMREAD_UNCHANGED)
+                if img_bgr_float32 is None:
+                    continue
+                img_rgb_float32 = cv2.cvtColor(img_bgr_float32, cv2.COLOR_BGR2RGB)
+                x_clean = np.expand_dims(
+                    np.transpose(img_rgb_float32.astype(np.float32), (2, 0, 1)),
+                    axis=0,
+                )
+                cached_count += 1
             
             # --- Altrimenti, la calcola ex-novo con MTCNN e la salva ---
             else:
@@ -117,12 +119,13 @@ def main():
                     np_img_01 = (best_face_tensor.cpu().numpy() + 1.0) / 2.0
                     x_clean = np.expand_dims(np_img_01, axis=0) 
                     
-                    img_c_save = (np.transpose(np_img_01, (1, 2, 0)) * 255.0).astype(np.uint8)
-                    try:
-                        Image.fromarray(img_c_save).save(crop_save_path)
-                    except Exception as e:
-                        print(f"\n[ERRORE] Impossibile salvare crop in: {crop_save_path} - {e}")
-                        continue 
+                    img_c_bgr_float32 = cv2.cvtColor(
+                        np.transpose(np_img_01, (1, 2, 0)).astype(np.float32),
+                        cv2.COLOR_RGB2BGR,
+                    )
+                    if not cv2.imwrite(str(crop_save_path), img_c_bgr_float32):
+                        print(f"\n[ERRORE] Impossibile salvare clean TIFF: {crop_save_path}")
+                        continue
                 else:
                     continue # MTCNN ha fallito nel trovare l'identità corretta
                 
@@ -134,7 +137,10 @@ def main():
             valid_records.append(row_dict)
 
     total_valid = len(valid_records)
-    print(f"-> Immagini d'oro pronte per l'attacco FGSM Untargeted: {total_valid}")
+    print(
+        f"-> Immagini d'oro pronte per l'attacco FGSM Untargeted: {total_valid} "
+        f"({cached_count} caricate da cache TIFF)"
+    )
 
     # =========================================================================
     # FASE 2: GENERAZIONE FGSM UNTARGETED (BATCH DIRETTO)
@@ -192,14 +198,16 @@ def main():
                 out_img_dir = eps_dir / identity_dir_name
                 out_img_dir.mkdir(parents=True, exist_ok=True)
                 
-                adv_filename = f"{orig_filename}.jpg"
+                adv_filename = f"{orig_filename}.tiff"
                 adv_save_path = out_img_dir / adv_filename
                 
-                img_a_save = (img_a_plot * 255.0).astype(np.uint8)
-                try:
-                    Image.fromarray(img_a_save).save(adv_save_path)
-                except Exception as e:
-                    print(f"\n[ERRORE FATALE] Impossibile salvare l'attacco in: {adv_save_path} - {e}")
+                img_a_bgr_float32 = cv2.cvtColor(
+                    np.clip(img_a_plot, 0.0, 1.0).astype(np.float32),
+                    cv2.COLOR_RGB2BGR,
+                )
+                if not cv2.imwrite(str(adv_save_path), img_a_bgr_float32):
+                    print(f"\n[ERRORE FATALE] Impossibile salvare adversarial TIFF: {adv_save_path}")
+                    continue
 
                 rel_source = row['cropped_image_path']
                 rel_adv = adv_save_path.relative_to(base_dir).as_posix()
@@ -223,7 +231,7 @@ def main():
         df_tracker = pd.DataFrame(eps_tracker_records)
         df_tracker.to_csv(eps_dir / f"tracker_{eps_str}.csv", index=False)
         
-    print("\n[OK] Processo Error-Generic completato con successo e immagini salvate (via PIL)!")
+    print("\n[OK] Processo FGSM Error-Generic completato con immagini TIFF salvate via OpenCV!")
 
 if __name__ == "__main__":
     main()

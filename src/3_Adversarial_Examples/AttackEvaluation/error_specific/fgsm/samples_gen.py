@@ -79,6 +79,7 @@ def main():
     # =========================================================================
     print("\n[FASE 1] Ritaglio MTCNN, Scrematura e Salvataggio Clean Cropped...")
     valid_records = []
+    cached_count = 0
     
     with torch.no_grad():
         for index, row in tqdm(df_clean.iterrows(), total=len(df_clean), desc="Pre-Inferenza"):
@@ -89,12 +90,38 @@ def main():
             if facenet_id == -1:
                 continue
                 
-            source_img_path = str(base_dir / row['image_path'])
-            identity_dir_name = Path(source_img_path).parent.name
-            img_filename = Path(source_img_path).name
+            source_img_path = Path(base_dir / row['image_path'])
+            identity_dir_name = source_img_path.parent.name
+            img_filename = f"{source_img_path.stem}.tiff"
+
+            out_crop_dir = cropped_clean_dir / identity_dir_name
+            out_crop_dir.mkdir(parents=True, exist_ok=True)
+            crop_save_path = out_crop_dir / img_filename
+
+            row_dict = row.to_dict()
+            row_dict['true_facenet_id'] = facenet_id
+            row_dict['cropped_image_path'] = crop_save_path.relative_to(base_dir).as_posix()
+
+            if crop_save_path.exists():
+                img_bgr_float32 = cv2.imread(str(crop_save_path), cv2.IMREAD_UNCHANGED)
+                if img_bgr_float32 is None:
+                    continue
+                img_rgb_float32 = cv2.cvtColor(img_bgr_float32, cv2.COLOR_BGR2RGB)
+                x_clean = np.expand_dims(
+                    np.transpose(img_rgb_float32.astype(np.float32), (2, 0, 1)),
+                    axis=0,
+                )
+                clean_tensor = torch.from_numpy(x_clean).to(device)
+                clean_logits = resnet(clean_tensor * 2.0 - 1.0).cpu().numpy()
+
+                row_dict['clean_logits'] = clean_logits
+                row_dict['x_clean'] = x_clean
+                valid_records.append(row_dict)
+                cached_count += 1
+                continue
                 
             try:
-                img_pil = Image.open(source_img_path).convert('RGB')
+                img_pil = Image.open(str(source_img_path)).convert('RGB')
             except Exception:
                 continue
             
@@ -125,21 +152,22 @@ def main():
                 crop_save_path = out_crop_dir / img_filename
                 
                 # Salva usando OpenCV (richiede conversione RGB -> BGR)
-                img_c_save = (np.transpose(np_img_01, (1, 2, 0)) * 255.0).astype(np.uint8)
-                img_c_bgr = cv2.cvtColor(img_c_save, cv2.COLOR_RGB2BGR)
-                cv2.imwrite(str(crop_save_path), img_c_bgr)
+                img_c_bgr_float32 = cv2.cvtColor(
+                    np.transpose(np_img_01, (1, 2, 0)).astype(np.float32),
+                    cv2.COLOR_RGB2BGR,
+                )
+                if not cv2.imwrite(str(crop_save_path), img_c_bgr_float32):
+                    print(f"\n[ERRORE] Impossibile salvare clean TIFF: {crop_save_path}")
+                    continue
                 
-                row_dict = row.to_dict()
-                row_dict['true_facenet_id'] = facenet_id
                 # Espandiamo dim per compatibilità con select_target_label: (1, 8631)
                 row_dict['clean_logits'] = np.expand_dims(best_logits, axis=0) 
                 row_dict['x_clean'] = x_clean 
-                row_dict['cropped_image_path'] = str(crop_save_path) # Il nuovo path che useranno le metriche!
                 
                 valid_records.append(row_dict)
 
     print(f"-> Immagini d'oro pronte per l'attacco: {len(valid_records)} su {len(df_clean)} "
-          f"({(len(valid_records)/len(df_clean))*100:.1f}%)")
+          f"({(len(valid_records)/len(df_clean))*100:.1f}%, {cached_count} da cache TIFF)")
 
     # =========================================================================
     # FASE 2: GENERAZIONE DEGLI ATTACCHI (Multi-Strategia)
@@ -176,9 +204,9 @@ def main():
                 true_facenet_id = row['true_facenet_id']
                 clean_logits = row['clean_logits']
                 
-                source_img_path = str(base_dir / row['image_path'])
-                identity_dir_name = Path(source_img_path).parent.name
-                orig_filename = Path(source_img_path).stem 
+                source_img_path = Path(base_dir / row['image_path'])
+                identity_dir_name = source_img_path.parent.name
+                orig_filename = source_img_path.stem
 
                 targets_to_attack = []
                 
@@ -208,13 +236,18 @@ def main():
                     out_img_dir.mkdir(parents=True, exist_ok=True)
                     
                     # Se RR, aggiungiamo l'ID target al nome per non sovrascrivere i file!
-                    adv_filename = f"{orig_filename}_to_{target_label_8631}.jpg" if strategy.startswith("rr_") else f"{orig_filename}.jpg"
+                    adv_filename = f"{orig_filename}_to_{target_label_8631}.tiff" if strategy.startswith("rr_") else f"{orig_filename}.tiff"
                     adv_save_path = out_img_dir / adv_filename
                     
-                    img_a_save = (img_a_plot * 255.0).astype(np.uint8)
-                    cv2.imwrite(str(adv_save_path), cv2.cvtColor(img_a_save, cv2.COLOR_RGB2BGR))
+                    img_a_bgr_float32 = cv2.cvtColor(
+                        np.clip(img_a_plot, 0.0, 1.0).astype(np.float32),
+                        cv2.COLOR_RGB2BGR,
+                    )
+                    if not cv2.imwrite(str(adv_save_path), img_a_bgr_float32):
+                        print(f"\n[ERRORE] Impossibile salvare adversarial TIFF: {adv_save_path}")
+                        continue
 
-                    rel_source = Path(row['cropped_image_path']).relative_to(base_dir).as_posix()
+                    rel_source = Path(row['cropped_image_path']).as_posix()
                     rel_adv = adv_save_path.relative_to(base_dir).as_posix()
 
                     eps_tracker_records.append({

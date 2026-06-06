@@ -35,6 +35,64 @@ from util.plot.utils_plot_shared import (
     plot_round_robin_plotly_grouped
 )
 
+
+IMAGE_SIZE = 160
+BATCH_SIZE = 64
+
+
+def resolve_project_path(base_dir: Path, path_value) -> Path:
+    path = Path(str(path_value))
+    if path.is_absolute():
+        return path
+    return base_dir / path
+
+
+def load_rgb_tiff(base_dir: Path, path_value, image_size: int = IMAGE_SIZE) -> np.ndarray:
+    path = resolve_project_path(base_dir, path_value)
+    image_bgr_float32 = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if image_bgr_float32 is None:
+        raise FileNotFoundError(f"TIFF non leggibile: {path}")
+    if image_bgr_float32.ndim != 3 or image_bgr_float32.shape[2] != 3:
+        raise ValueError(
+            f"TIFF RGB non valido: {path}, shape={image_bgr_float32.shape}"
+        )
+    if image_bgr_float32.shape[:2] != (image_size, image_size):
+        image_bgr_float32 = cv2.resize(
+            image_bgr_float32,
+            (image_size, image_size),
+            interpolation=cv2.INTER_LINEAR,
+        )
+    return cv2.cvtColor(image_bgr_float32, cv2.COLOR_BGR2RGB).astype(np.float32)
+
+
+def rgb_to_chw_01(image_rgb: np.ndarray) -> np.ndarray:
+    return np.transpose(image_rgb, (2, 0, 1)).astype(np.float32)
+
+
+def infer_resnet_batches(
+    resnet: torch.nn.Module,
+    images_chw_01: list[np.ndarray],
+    device: torch.device,
+    batch_size: int = BATCH_SIZE,
+) -> np.ndarray:
+    """Esegue inferenza NN1 in batch su immagini CHW float32 in [0, 1]."""
+    if not images_chw_01:
+        return np.empty((0,), dtype=np.float32)
+
+    outputs = []
+    with torch.inference_mode():
+        for start in range(0, len(images_chw_01), batch_size):
+            batch_np = np.stack(images_chw_01[start : start + batch_size]).astype(
+                np.float32,
+                copy=False,
+            )
+            batch_tensor = torch.from_numpy(batch_np).to(device)
+            batch_outputs = resnet(batch_tensor * 2.0 - 1.0)
+            outputs.append(batch_outputs.cpu().numpy())
+
+    return np.concatenate(outputs, axis=0)
+
+
 def main():
     print("======================================================")
     print(" METRICHE & PLOT: FGSM TARGETED (Error-Specific)      ")
@@ -101,7 +159,7 @@ def main():
         # =========================================================
         # BLOCCO 1: INFERENZA IN BATCH E AGGIORNAMENTO DATI
         # =========================================================
-        batch_size = 64 
+        batch_size = BATCH_SIZE
         print(f"\n[BLOCCO 1 - {strategy.upper()}] Inferenza delle immagini avversarie e originali...")
 
         with torch.no_grad():
@@ -114,13 +172,13 @@ def main():
                     x_adv_batch, x_clean_batch = [], []
                     for _, row in batch_df.iterrows():
                         # Carichiamo sia la Clean che la Adv
-                        c_rgb = cv2.cvtColor(cv2.resize(cv2.imread(row['source_image_path']), (160, 160)), cv2.COLOR_BGR2RGB)
-                        a_rgb = cv2.cvtColor(cv2.imread(row['adversarial_image_path']), cv2.COLOR_BGR2RGB)
-                        x_clean_batch.append(np.transpose(c_rgb, (2, 0, 1)).astype(np.float32) / 255.0)
-                        x_adv_batch.append(np.transpose(a_rgb, (2, 0, 1)).astype(np.float32) / 255.0)
+                        c_rgb = load_rgb_tiff(base_dir, row['source_image_path'])
+                        a_rgb = load_rgb_tiff(base_dir, row['adversarial_image_path'])
+                        x_clean_batch.append(rgb_to_chw_01(c_rgb))
+                        x_adv_batch.append(rgb_to_chw_01(a_rgb))
                         
-                    x_clean_tensor = torch.tensor(np.array(x_clean_batch)).to(device)
-                    x_adv_tensor = torch.tensor(np.array(x_adv_batch)).to(device)
+                    x_clean_tensor = torch.from_numpy(np.stack(x_clean_batch)).to(device)
+                    x_adv_tensor = torch.from_numpy(np.stack(x_adv_batch)).to(device)
                     
                     # Inferenza su entrambe
                     clean_preds = torch.argmax(resnet(x_clean_tensor * 2 - 1), dim=1).cpu().numpy()
@@ -205,7 +263,7 @@ def main():
                 robust_accuracy=robust_accuracy,
                 targeted_asr=targeted_asr,
                 untargeted_asr=untargeted_asr,
-                notes="Valutazione Clean -> Adv"
+                notes="Valutazione Clean -> Adv TIFF 32-bit"
             )
 
         # Chiamata ai grafici
@@ -223,11 +281,8 @@ def main():
         for eps in epsilons:
             sample = df[(df['eps'] == eps) & (df['source_image_path'] == sample_source_path)].iloc[0]
             
-            c_bgr = cv2.resize(cv2.imread(sample['source_image_path']), (160, 160))
-            a_bgr = cv2.imread(sample['adversarial_image_path'])
-            
-            c_rgb = cv2.cvtColor(c_bgr, cv2.COLOR_BGR2RGB)
-            a_rgb = cv2.cvtColor(a_bgr, cv2.COLOR_BGR2RGB)
+            c_rgb = load_rgb_tiff(base_dir, sample['source_image_path'])
+            a_rgb = load_rgb_tiff(base_dir, sample['adversarial_image_path'])
 
             eps_str_fmt = f"{eps:.3f}".replace('.', '_')
             
@@ -343,11 +398,11 @@ def main():
                 
                 # --- GRAD-CAM (Singolo Showcase) ---
                 sample = sample_df.iloc[0]
-                c_rgb = cv2.cvtColor(cv2.resize(cv2.imread(sample['source_image_path']), (160, 160)), cv2.COLOR_BGR2RGB)
-                a_rgb = cv2.cvtColor(cv2.imread(sample['adversarial_image_path']), cv2.COLOR_BGR2RGB)
+                c_rgb = load_rgb_tiff(base_dir, sample['source_image_path'])
+                a_rgb = load_rgb_tiff(base_dir, sample['adversarial_image_path'])
                 
-                c_chw = np.transpose(c_rgb, (2, 0, 1)).astype(np.float32) / 255.0
-                a_chw = np.transpose(a_rgb, (2, 0, 1)).astype(np.float32) / 255.0
+                c_chw = rgb_to_chw_01(c_rgb)
+                a_chw = rgb_to_chw_01(a_rgb)
                 
                 t_clean = torch.tensor(np.expand_dims(c_chw, 0) * 2 - 1).to(device)
                 t_adv = torch.tensor(np.expand_dims(a_chw, 0) * 2 - 1).to(device)
@@ -366,22 +421,26 @@ def main():
                 bg_identities = np.random.choice([i for i in df_unique_clean['identity_name'].unique() if i != identity_name], 4, replace=False)
                 bg_df = df_unique_clean[df_unique_clean['identity_name'].isin(bg_identities)]
                 
-                bg_emb, bg_labels = [], []
-                src_clean_emb, src_adv_emb = [], []
+                bg_images, bg_labels = [], []
+                src_clean_images, src_adv_images = [], []
                 
                 with torch.no_grad():
                     # 1. Sfondo
                     for _, row in bg_df.iterrows():
-                        img = np.transpose(cv2.cvtColor(cv2.resize(cv2.imread(row['source_image_path']), (160, 160)), cv2.COLOR_BGR2RGB), (2, 0, 1)).astype(np.float32) / 255.0
-                        bg_emb.append(resnet(torch.tensor(np.expand_dims(img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
+                        img = rgb_to_chw_01(load_rgb_tiff(base_dir, row['source_image_path']))
+                        bg_images.append(img)
                         bg_labels.append(row['identity_name'])
                         
                     # 2. Protagonisti (Clean & Adv)
                     for _, row in sample_df.iterrows():
-                        c_img = np.transpose(cv2.cvtColor(cv2.resize(cv2.imread(row['source_image_path']), (160, 160)), cv2.COLOR_BGR2RGB), (2, 0, 1)).astype(np.float32) / 255.0
-                        a_img = np.transpose(cv2.cvtColor(cv2.imread(row['adversarial_image_path']), cv2.COLOR_BGR2RGB), (2, 0, 1)).astype(np.float32) / 255.0
-                        src_clean_emb.append(resnet(torch.tensor(np.expand_dims(c_img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
-                        src_adv_emb.append(resnet(torch.tensor(np.expand_dims(a_img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
+                        c_img = rgb_to_chw_01(load_rgb_tiff(base_dir, row['source_image_path']))
+                        a_img = rgb_to_chw_01(load_rgb_tiff(base_dir, row['adversarial_image_path']))
+                        src_clean_images.append(c_img)
+                        src_adv_images.append(a_img)
+
+                    bg_emb = infer_resnet_batches(resnet, bg_images, device)
+                    src_clean_emb = infer_resnet_batches(resnet, src_clean_images, device)
+                    src_adv_emb = infer_resnet_batches(resnet, src_adv_images, device)
                 
                 resnet.classify = True
                 
@@ -412,14 +471,14 @@ def main():
                     tgt_id = unique_targets[0]
                     tgt_df = df_unique_clean[df_unique_clean['clean_pred_class'] == tgt_id]
                     if not tgt_df.empty:
-                        tgt_clean_emb = []
+                        tgt_clean_images = []
                         resnet.classify = False
                         with torch.no_grad():
                             for _, row in tgt_df.iterrows():
-                                img = np.transpose(cv2.cvtColor(cv2.resize(cv2.imread(row['source_image_path']), (160, 160)), cv2.COLOR_BGR2RGB), (2, 0, 1)).astype(np.float32) / 255.0
-                                tgt_clean_emb.append(resnet(torch.tensor(np.expand_dims(img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
+                                img = rgb_to_chw_01(load_rgb_tiff(base_dir, row['source_image_path']))
+                                tgt_clean_images.append(img)
+                            tgt_clean_emb = infer_resnet_batches(resnet, tgt_clean_images, device)
                         resnet.classify = True
-                        tgt_clean_emb = np.array(tgt_clean_emb)
                 
                 # Titolo customizzato per UMAP 
                 custom_title = f'"{identity_name}" attacked with \u03B5={PIVOT_EPS:.3f}'
@@ -444,8 +503,8 @@ def main():
                     rr_identities = df_010['identity_name'].unique()
                     df_clean_rr = df[(df['eps'] == epsilons[0]) & (df['identity_name'].isin(rr_identities))]
                     
-                    c_embs, c_lbls = [], []
-                    a_embs, a_flags = [], []
+                    c_images, c_lbls = [], []
+                    a_images, a_flags = [], []
                     a_src_lbls = [] 
                     a_tgt_lbls = [] 
 
@@ -453,22 +512,25 @@ def main():
                     with torch.no_grad():
                         # 1. Estraiamo Clean (I 10 Continenti)
                         for _, row in df_clean_rr.iterrows():
-                            img = np.transpose(cv2.cvtColor(cv2.resize(cv2.imread(str(base_dir / row['source_image_path'])), (160, 160)), cv2.COLOR_BGR2RGB), (2, 0, 1)).astype(np.float32) / 255.0
-                            c_embs.append(resnet(torch.tensor(np.expand_dims(img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
+                            img = rgb_to_chw_01(load_rgb_tiff(base_dir, row['source_image_path']))
+                            c_images.append(img)
                             c_lbls.append(row['identity_name'])
                             
                         # 2. Estraiamo gli Attacchi a eps=0.10 (Le X e O)
                         for _, row in df_010.iterrows():
                             # Legge e converte in RGB (niente resize, le avversarie sono già 160x160)
-                            a_rgb = cv2.cvtColor(cv2.imread(str(base_dir / row['adversarial_image_path'])), cv2.COLOR_BGR2RGB)
-                            img = np.transpose(a_rgb, (2, 0, 1)).astype(np.float32) / 255.0
+                            a_rgb = load_rgb_tiff(base_dir, row['adversarial_image_path'])
+                            img = rgb_to_chw_01(a_rgb)
                             
-                            a_embs.append(resnet(torch.tensor(np.expand_dims(img, 0) * 2 - 1).to(device)).cpu().numpy()[0])
+                            a_images.append(img)
                             a_flags.append(row['adv_pred_class'] == row['target_class'])
                             a_src_lbls.append(row['identity_name']) 
 
                             # Assumo che 'target_class' sia l'ID o il nome, adattalo se nel dataframe si chiama in un altro modo
                             a_tgt_lbls.append(str(row['target_class'])) 
+
+                        c_embs = infer_resnet_batches(resnet, c_images, device)
+                        a_embs = infer_resnet_batches(resnet, a_images, device)
                             
                     resnet.classify = True
                     
