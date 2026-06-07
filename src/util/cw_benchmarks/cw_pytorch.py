@@ -108,28 +108,7 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
     def _tanh_to_original(self, x_tanh: torch.Tensor, clip_min: torch.Tensor, clip_max: torch.Tensor) -> torch.Tensor:
         return (torch.tanh(x_tanh) + 1.0) / 2.0 * (clip_max - clip_min) + clip_min
 
-    def _loss(self, x_adv: torch.Tensor, target: torch.Tensor, x: torch.Tensor, const: torch.Tensor, tau: torch.Tensor):
-        z_predicted = self._forward_model(x_adv)
-        z_target = torch.sum(z_predicted * target, dim=1)
-        
-        min_z = torch.min(z_predicted, dim=1, keepdim=True)[0]
-        z_other = torch.max(z_predicted * (1 - target) + (min_z - 1.0) * target, dim=1)[0]
-
-        if self.targeted:
-            loss_1 = torch.clamp(z_other - z_target + self.confidence, min=0.0)
-        else:
-            loss_1 = torch.clamp(z_target - z_other + self.confidence, min=0.0)
-
-        diff_abs = torch.abs(x_adv - x)
-        # Fix per batching: tau deve fare broadcast con (B, C, H, W)
-        tau_view = tau.view(-1, 1, 1, 1)
-        loss_2 = torch.sum(torch.clamp(diff_abs - tau_view, min=0.0).reshape(x_adv.size(0), -1), dim=1)
-
-        loss = loss_1 * const + loss_2
-        return z_predicted, loss, loss_1, loss_2
-    
     def _loss_from_logits(self, z_predicted: torch.Tensor, x_adv: torch.Tensor, target: torch.Tensor, x: torch.Tensor, const: torch.Tensor, tau: torch.Tensor):
-        """Calcola la loss SENZA fare un nuovo forward pass, usando i logit già calcolati."""
         z_target = torch.sum(z_predicted * target, dim=1)
         min_z = torch.min(z_predicted, dim=1, keepdim=True)[0]
         z_other = torch.max(z_predicted * (1 - target) + (min_z - 1.0) * target, dim=1)[0]
@@ -175,28 +154,46 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
         x_adv_batch_tanh = self._original_to_tanh(x_batch, clip_min, clip_max).clone()
         adam = PyTorchCustomAdam(alpha=self.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
         
+        B = x_batch.size(0)
+        
+        # CORREZIONE 1: ART usa un limite "infinito" per il primo step e valuta la DIFFERENZA di convergenza.
+        prev_loss = torch.full((B,), 1e6, device=self.device, dtype=x_batch.dtype)
+        active_adam_mask = torch.ones(B, dtype=torch.bool, device=self.device)
+        
         for num_iter in range(1, self.max_iter + 1):
+            # Se tutti hanno superato la soglia di convergenza nel batch, possiamo fermarci in anticipo.
+            if not active_adam_mask.any():
+                break
+                
             x_adv_batch = self._tanh_to_original(x_adv_batch_tanh, clip_min, clip_max)
             x_adv_det = x_adv_batch.detach().requires_grad_(True)
             
-            # 1. Forward Pass con Automatic Mixed Precision (AMP) per velocizzare InceptionResnet
-            with torch.autocast(device_type=self.device.type, dtype=torch.float16):
-                z_logits = self._forward_model(x_adv_det)
+            z_logits = self._forward_model(x_adv_det)
             
-            # Torniamo a float32 puro per la precisione millimetrica dei gradienti ART
-            z_logits = z_logits.float()
-            
-            # 2. Controllo Early Stopping PRIMA dell'update (Risparmiamo 1 intero forward pass!)
+            # Controllo Early Stopping ESATTO come ART (|prev_loss - loss| < 0.001)
             with torch.no_grad():
                 loss = self._loss_from_logits(z_logits, x_adv_det, y_batch, x_batch, const, tau)
-                if (loss < 0.001).all():
+                
+                # Maschera temporanea che segna chi ha convergiuto in questo step
+                converged = torch.abs(prev_loss - loss) < 0.001
+                
+                # Chi converge viene "spento" definitivamente e registriamo la loss per gli attivi
+                active_adam_mask = active_adam_mask & ~converged
+                prev_loss = loss
+                
+                if not active_adam_mask.any():
                     break
             
-            # 3. Calcolo del gradiente e update
             total_grad = self._art_manual_gradient(z_logits, y_batch, x_adv_det, x_adv_batch_tanh, clip_min, clip_max, x_batch, tau)
             
             with torch.no_grad():
-                x_adv_batch_tanh = adam.update(num_iter, x_adv_batch_tanh, total_grad)
+                new_x_tanh = adam.update(num_iter, x_adv_batch_tanh, total_grad)
+                # Applichiamo il gradiente SOLO alle immagini ancora attive nell'ottimizzazione
+                x_adv_batch_tanh = torch.where(
+                    active_adam_mask.view(-1, 1, 1, 1), 
+                    new_x_tanh, 
+                    x_adv_batch_tanh
+                )
                 
         with torch.no_grad():
             return self._tanh_to_original(x_adv_batch_tanh, clip_min, clip_max)
@@ -209,17 +206,16 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
             
         clip_min, clip_max = self.estimator.clip_values if self.estimator.clip_values is not None else (np.amin(x), np.amax(x))
 
-        x_tensor = torch.tensor(x, dtype=torch.float32, device=self.device)
-        y_tensor = torch.tensor(y, dtype=torch.float32, device=self.device)
-        clip_min = torch.tensor(clip_min, dtype=torch.float32, device=self.device)
-        clip_max = torch.tensor(clip_max, dtype=torch.float32, device=self.device)
+        x_tensor = torch.tensor(x, dtype=torch.float64, device=self.device)
+        y_tensor = torch.tensor(y, dtype=torch.float64, device=self.device)
+        clip_min = torch.tensor(clip_min, dtype=torch.float64, device=self.device)
+        clip_max = torch.tensor(clip_max, dtype=torch.float64, device=self.device)
 
         x_adv_out = x_tensor.clone()
         self._model.eval()
 
         num_batches = int(np.ceil(x_tensor.size(0) / self.batch_size))
         
-        # Iteriamo a BLOCCHI, non più campione per campione!
         for batch_idx in tqdm(range(num_batches), desc="C&W L_inf (Batched ART-Match)", disable=not self.verbose):
             start_idx = batch_idx * self.batch_size
             end_idx = min(start_idx + self.batch_size, x_tensor.size(0))
@@ -228,24 +224,21 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
             y_batch = y_tensor[start_idx:end_idx]
             B = x_batch.size(0)
 
-            # Tensori di stato per ogni immagine nel batch
-            tau = torch.ones(B, device=self.device)
-            delta_i_best = torch.ones(B, device=self.device)
+            tau = torch.ones(B, device=self.device, dtype=x_batch.dtype)
+            delta_i_best = torch.ones(B, device=self.device, dtype=x_batch.dtype)
             sample_done = torch.zeros(B, dtype=torch.bool, device=self.device) 
             
-            # Condizione esterna: continua se c'è almeno un'immagine con tau > limite E che non ha "finito"
             while torch.any((tau > 1.0 / 256.0) & (~sample_done)):
                 active_tau_mask = (tau > 1.0 / 256.0) & (~sample_done)
                 sample_done = torch.where(active_tau_mask, torch.ones_like(sample_done), sample_done)
                 
-                const = torch.full((B,), self.initial_const, device=self.device)
-                const_found_adv = torch.zeros(B, dtype=torch.bool, device=self.device)
+                const = torch.full((B,), self.initial_const, device=self.device, dtype=x_batch.dtype)
                 
-                # Condizione interna: continua il grid search del const per chi è ancora attivo
-                while torch.any((const < self.largest_const) & active_tau_mask & (~const_found_adv)):
-                    active_const_mask = (const < self.largest_const) & active_tau_mask & (~const_found_adv)
+                # CORREZIONE 2: NON USCIAMO ANTICIPATAMENTE! Continuiamo a far salire const fino in fondo come fa ART.
+                # L'early-exit è stato rimosso per rispecchiare l'esplorazione inefficiente dello spazio originaria di C&W in ART.
+                while torch.any((const < self.largest_const) & active_tau_mask):
+                    active_const_mask = (const < self.largest_const) & active_tau_mask
                     
-                    # Compute perturbazione per l'intero batch
                     x_adv_batch = self._generate_single(x_batch, y_batch, clip_min, clip_max, const, tau)
                     
                     with torch.no_grad():
@@ -259,18 +252,17 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
                             success_mask = (pred_class != target_class) & (delta_i < delta_i_best) & active_const_mask
                         
                         if success_mask.any():
-                            # Salviamo i migliori successi
+                            # Salviamo i migliori successi se hanno un limite di rumore (delta_i) più basso
                             x_adv_out[start_idx:end_idx][success_mask] = x_adv_batch[success_mask]
                             delta_i_best[success_mask] = delta_i[success_mask]
                             
-                            # Immagini di successo escono dal const-loop e rientreranno nel prossimo tau-loop
+                            # Immagini di successo rientreranno nel prossimo tau-loop
                             sample_done[success_mask] = False
-                            const_found_adv[success_mask] = True
                             
-                    # Aumenta const solo per chi non ha ancora avuto successo in questo ciclo
-                    const = torch.where(active_const_mask & (~const_found_adv), const * self.const_factor, const)
+                    # Aumenta const (senza break)
+                    const = torch.where(active_const_mask, const * self.const_factor, const)
 
-                # Aggiornamento di tau alla fine del const-loop per i sample attivi
+                # Aggiornamento di tau AL TERMINE del ciclo dei const per i sample attivi
                 with torch.no_grad():
                     tau_actual = torch.amax(torch.abs(x_adv_out[start_idx:end_idx] - x_batch), dim=(1, 2, 3))
                     tau = torch.where(active_tau_mask & (tau_actual < tau), tau_actual, tau)
