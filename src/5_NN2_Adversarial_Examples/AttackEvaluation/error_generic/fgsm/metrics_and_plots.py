@@ -12,11 +12,11 @@ import pickle
 import sys
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from PIL import Image, ImageOps, UnidentifiedImageError
 from tqdm import tqdm
 
 torch.backends.cudnn.enabled = False
@@ -45,7 +45,9 @@ from util.plot.utils_plot_shared import (
 )
 
 
+IMAGE_SIZE_NN1 = 160
 IMAGE_SIZE_NN2 = 224
+BATCH_SIZE = 64
 MEAN_BGR = np.array([91.4953, 103.8827, 131.0912], dtype=np.float32)
 
 
@@ -68,20 +70,45 @@ def resolve_project_path(base_dir: Path, path_value) -> Path:
     return base_dir / path
 
 
-def load_rgb_image(path: Path, image_size: int = IMAGE_SIZE_NN2) -> np.ndarray:
-    try:
-        with Image.open(path) as image:
-            image = ImageOps.exif_transpose(image).convert("RGB")
-            if image.size != (image_size, image_size):
-                image = image.resize((image_size, image_size), Image.Resampling.BILINEAR)
-            return np.asarray(image, dtype=np.uint8)
-    except (OSError, UnidentifiedImageError) as exc:
-        raise FileNotFoundError(f"Immagine non leggibile: {path}") from exc
+def load_rgb_tiff_01(path: Path, image_size: int = IMAGE_SIZE_NN2) -> np.ndarray:
+    """Carica un TIFF NN1 float32 [0, 1] e lo ridimensiona senza quantizzarlo."""
+    image_bgr = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if image_bgr is None:
+        raise FileNotFoundError(f"TIFF non leggibile: {path}")
+    if image_bgr.ndim != 3 or image_bgr.shape[2] != 3:
+        raise ValueError(f"TIFF RGB non valido: {path}, shape={image_bgr.shape}")
+    if not np.issubdtype(image_bgr.dtype, np.floating):
+        raise TypeError(
+            f"Il dataset di trasferibilita deve contenere TIFF float32 [0, 1]: "
+            f"{path}, dtype={image_bgr.dtype}"
+        )
+
+    image_bgr = image_bgr.astype(np.float32, copy=False)
+    if not np.isfinite(image_bgr).all():
+        raise ValueError(f"TIFF contenente valori non finiti: {path}")
+
+    min_value = float(image_bgr.min())
+    max_value = float(image_bgr.max())
+    if min_value < -1e-6 or max_value > 1.0 + 1e-6:
+        raise ValueError(
+            f"TIFF fuori dall'intervallo [0, 1]: {path}, "
+            f"min={min_value:.6f}, max={max_value:.6f}"
+        )
+
+    if image_bgr.shape[:2] != (image_size, image_size):
+        image_bgr = cv2.resize(
+            image_bgr,
+            (image_size, image_size),
+            interpolation=cv2.INTER_LINEAR,
+        )
+
+    image_bgr = np.clip(image_bgr, 0.0, 1.0)
+    return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
 
 def preprocess_rgb_for_senet(image_rgb: np.ndarray) -> np.ndarray:
-    """SENet VGGFace2 preprocessing: RGB uint8 -> BGR float32 - MEAN_BGR -> CHW."""
-    image_bgr = image_rgb[:, :, ::-1].astype(np.float32)
+    """SENet VGGFace2: RGB float32 [0, 1] -> BGR [0, 255] - MEAN_BGR -> CHW."""
+    image_bgr = image_rgb[:, :, ::-1].astype(np.float32) * 255.0
     image_bgr -= MEAN_BGR
     return np.transpose(image_bgr, (2, 0, 1)).astype(np.float32)
 
@@ -98,7 +125,7 @@ def main():
         base_dir
         / "dataset"
         / "attacks"
-        / "NN2"
+        / "NN1"
         / "error_generic"
         / "fgsm"
     )
@@ -119,7 +146,7 @@ def main():
     if not tracker_files:
         raise FileNotFoundError(
             f"Nessun tracker trovato in {attacks_dir}. "
-            "Esegui prima il generatore FGSM transferability NN1 -> NN2."
+            "Sono richiesti i tracker FGSM gia generati contro NN1."
         )
 
     print(f"-> Trovati {len(tracker_files)} tracker. Unione in corso...")
@@ -137,8 +164,8 @@ def main():
 
     epsilons = sorted(df["eps"].unique())
     print(f"-> Epsilon rilevati: {epsilons}")
-    print("-> Le immagini adversarial sono generate da NN1 a 160x160.")
-    print("-> In questa valutazione vengono ridimensionate a 224x224 e preprocessate per SENet.\n")
+    print("-> Uso diretto dei TIFF float32 generati contro NN1 a 160x160.")
+    print("-> Resize float32 a 224x224 e preprocessing Caffe per SENet50-FT.\n")
 
     for column, default in [
         ("clean_pred_class", -1),
@@ -174,10 +201,10 @@ def main():
     # =========================================================
     # BLOCCO 1: INFERENZA NN2 SULLE CLEAN E SULLE ADV TRASFERITE
     # =========================================================
-    batch_size = 64
+    batch_size = BATCH_SIZE
     print("\n[BLOCCO 1] Inferenza NN2 su clean e adversarial trasferite...")
 
-    with torch.no_grad():
+    with torch.inference_mode():
         for eps in epsilons:
             df_eps = df[df["eps"] == eps]
 
@@ -190,8 +217,8 @@ def main():
                     clean_path = resolve_project_path(base_dir, row["source_image_path"])
                     adv_path = resolve_project_path(base_dir, row["adversarial_image_path"])
 
-                    clean_rgb = load_rgb_image(clean_path, IMAGE_SIZE_NN2)
-                    adv_rgb = load_rgb_image(adv_path, IMAGE_SIZE_NN2)
+                    clean_rgb = load_rgb_tiff_01(clean_path, IMAGE_SIZE_NN2)
+                    adv_rgb = load_rgb_tiff_01(adv_path, IMAGE_SIZE_NN2)
 
                     clean_batch.append(preprocess_rgb_for_senet(clean_rgb))
                     adv_batch.append(preprocess_rgb_for_senet(adv_rgb))
@@ -296,8 +323,7 @@ def main():
                 untargeted_asr=transfer_asr,
                 notes=(
                     f"Sorgente NN1 160x160; target NN2 SENet50 resize 224x224; "
-                    f"Caffe BGR mean preprocessing; clean_acc_all={clean_accuracy:.4f}; "
-                    f"robust_acc_all={robust_accuracy_all:.4f}; "
+                    f"TIFF float32; Caffe BGR mean preprocessing; "
                     f"clean_correct_subset={clean_correct_total}/{total}"
                 ),
             )
@@ -345,8 +371,14 @@ def main():
             continue
 
         sample = sample_candidates.iloc[0]
-        clean_rgb = load_rgb_image(resolve_project_path(base_dir, sample["source_image_path"]), IMAGE_SIZE_NN2)
-        adv_rgb = load_rgb_image(resolve_project_path(base_dir, sample["adversarial_image_path"]), IMAGE_SIZE_NN2)
+        clean_rgb = load_rgb_tiff_01(
+            resolve_project_path(base_dir, sample["source_image_path"]),
+            IMAGE_SIZE_NN2,
+        )
+        adv_rgb = load_rgb_tiff_01(
+            resolve_project_path(base_dir, sample["adversarial_image_path"]),
+            IMAGE_SIZE_NN2,
+        )
 
         status_text = "RESISTED" if int(sample["adv_correct_nn2"]) == 1 else "TRANSFERRED"
         eps_str = f"{eps:.3f}".replace(".", "_")
