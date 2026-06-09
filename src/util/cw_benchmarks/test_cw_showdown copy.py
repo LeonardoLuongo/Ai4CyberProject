@@ -171,9 +171,9 @@ def evaluate_batch(model, x_clean, x_adv, y_true, y_target=None):
     return success_rate, mean_linf, max_linf
 
 def main():
-    print("======================================================")
-    print(" SHOWDOWN: ART vs CUSTOM (ART Match) vs CUSTOM BINARY ")
-    print("======================================================\n")
+    print("======================================")
+    print(" SHOWDOWN: ART vs CUSTOM (ART Match) ")
+    print("======================================\n")
 
     base_dir = Path.cwd()
     csv_path = base_dir / "dataset" / "clean" / "splits" / "manifest.csv"
@@ -530,7 +530,11 @@ def seed_everything(seed=42):
     # Opzionale: blocca operazioni che non hanno una controparte deterministica
     # torch.use_deterministic_algorithms(True)
 
-
+# Permette alla GPU di trovare l'algoritmo FP64 più veloce per immagini 160x160
+torch.backends.cudnn.benchmark = True
+# Opzionale: disabilitare il deterministic spinge ulteriormente le performance, 
+# pur mantenendo una precisione a 10^-8
+torch.backends.cudnn.deterministic = False
 
 if __name__ == "__main__":
     main()

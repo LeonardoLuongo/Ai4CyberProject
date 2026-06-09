@@ -3,6 +3,13 @@ import time
 import numpy as np
 import pandas as pd
 import torch
+
+# Permette alla GPU di trovare l'algoritmo FP64 più veloce per immagini 160x160
+torch.backends.cudnn.benchmark = True
+# Opzionale: disabilitare il deterministic spinge ulteriormente le performance, 
+# pur mantenendo una precisione a 10^-8
+torch.backends.cudnn.deterministic = False
+
 import torch.nn as nn
 from tqdm import tqdm
 from pathlib import Path
@@ -17,20 +24,30 @@ sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
 from facenet_pytorch import InceptionResnetV1, MTCNN
 from art.estimators.classification import PyTorchClassifier
 
-# Importiamo la tua classe ottimizzata e le utility
+# Importiamo la tua classe Clone SOTA e le utility
 from util.cw_benchmarks.cw_pytorch import CarliniLInfMethodPyTorch
 from util.identity_mapper import IdentityMapper
 from util.attack_error_specific_utils import select_target_label, get_one_hot_target
 
 # ==========================================
-# WRAPPER (Per Normalizzazione Range)
+# WRAPPER (Per Normalizzazione Range e Float64)
 # ==========================================
 class FacenetWrapper(nn.Module):
+    """Usato per la valutazione standard finale."""
     def __init__(self, model):
         super().__init__()
         self.model = model
     def forward(self, x):
-        return self.model(x * 2.0 - 1.0)
+        x_double = x.to(torch.float64)
+        return self.model(x_double * 2.0 - 1.0)
+
+class ARTFloat64Wrapper(nn.Module):
+    """Intercetta l'input degradato a Float32 da ART e lo riporta a Float64 per ResNet."""
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, x):
+        return self.model(x.to(torch.float64))
 
 def main():
     print("======================================================")
@@ -48,25 +65,28 @@ def main():
     # --- PARAMETRI GRID SEARCH ---
     BUDGET_LINF = 0.10
     SAMPLES_PER_ID = 1  
-    BATCH_SIZE = 128
+    BATCH_SIZE = 128 # Float64 = VRAM dimezzata, 32 è sicuro
     
-    # Parametri da esplorare (Targeted su Least-Likely richiede più convergenza)
-    learning_rates = [0.005, 0.01, 0.05, 0.1]
-    max_iters_list = [5, 10, 25, 50, 100, 200]
+    # Parametri da esplorare (Targeted richiede più convergenza)
+    learning_rates = [0.0175, 0.0225, 0.0275]
+    max_iters_list = [5, 10, 15]
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"-> Inizializzazione Reti su {device}...")
+    print(f"-> Inizializzazione Reti su {device} (Double Precision)...")
     
     mapper = IdentityMapper(meta_csv_path)
     mtcnn = MTCNN(image_size=160, margin=0, keep_all=True, post_process=True, device=device)
     
     resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
     resnet.classify = True 
+    resnet.double() # <-- FORZIAMO LA RETE A LAVORARE IN 64-BIT
+    
     wrapped_model = FacenetWrapper(resnet).eval()
+    art_resnet_shield = ARTFloat64Wrapper(resnet).eval()
 
     # ART Classifier con 8631 classi piene
     classifier = PyTorchClassifier(
-        model=resnet, loss=nn.CrossEntropyLoss(), input_shape=(3, 160, 160), 
+        model=art_resnet_shield, loss=nn.CrossEntropyLoss(), input_shape=(3, 160, 160), 
         nb_classes=8631, preprocessing=(0.5, 0.5), clip_values=(0.0, 1.0), 
         device_type='gpu' if torch.cuda.is_available() else 'cpu'
     )
@@ -76,9 +96,8 @@ def main():
     # --- FASE 1: PRE-FILTRAGGIO E TARGETING ---
     print(f"\n[FASE 1] Estrazione e Generazione Target LLC su 8631 classi ({SAMPLES_PER_ID} img/ID)...")
     valid_x = []
-    valid_y_true = []
-    valid_y_target_onehot = []
     valid_y_target_raw = []
+    valid_y_target_onehot = []
     
     grouped = df_clean.groupby('identity_id')
     
@@ -100,25 +119,23 @@ def main():
                 faces = mtcnn(img_pil)
                 if faces is None: continue
                 
-                faces = faces.to(device)
-                logits_all = resnet(faces)
-                preds_all = torch.argmax(logits_all, dim=1).cpu().numpy()
+                faces_device = faces.to(device).double()
+                preds_all = torch.argmax(resnet(faces_device), dim=1).cpu().numpy()
                 
                 if facenet_id in preds_all:
                     match_idx = int(np.where(preds_all == facenet_id)[0][0])
-                    best_face = faces[match_idx] 
+                    best_face = faces_device[match_idx] 
                     
                     # Recuperiamo i logit completi (8631 classi)
-                    best_logits = logits_all[match_idx].unsqueeze(0).cpu().numpy()
+                    best_logits = resnet(best_face.unsqueeze(0) * 2.0 - 1.0).cpu().numpy()
                     tensor_img_01 = (best_face + 1.0) / 2.0
                     
                     # SELEZIONE TARGET LEAST-LIKELY SULLE 8631 CLASSI
                     t_id = select_target_label(best_logits, facenet_id, strategy="least-likely", num_classes=8631)
                     y_target_onehot = get_one_hot_target(t_id, num_classes=8631)
                     
-                    # Convertiamo il tensore in numpy per l'attacco ART
+                    # Convertiamo il tensore in numpy per l'attacco ART (FLOAT64)
                     valid_x.append(tensor_img_01.cpu().numpy())
-                    valid_y_true.append(facenet_id)
                     valid_y_target_onehot.append(y_target_onehot[0])
                     valid_y_target_raw.append(t_id)
                     samples_taken += 1
@@ -127,9 +144,9 @@ def main():
         print("[ERRORE] Nessun campione valido.")
         return
 
-    # Gli array sono pronti per essere consumati da CarliniLInfMethodPyTorch (richiede Numpy)
-    x_clean_np = np.stack(valid_x)
-    y_target_onehot_np = np.stack(valid_y_target_onehot)
+    # Array Float64
+    x_clean_np = np.stack(valid_x).astype(np.float64)
+    y_target_onehot_np = np.stack(valid_y_target_onehot).astype(np.float64)
     
     # Tensori per la valutazione ultraveloce PyTorch
     x_clean_tensor = torch.tensor(x_clean_np).to(device)
@@ -139,12 +156,12 @@ def main():
     print(f"-> Immagini valide raccolte: {total_samples}")
 
     # --- FASE 2: GRID SEARCH AVVERSARIA TARGETED ---
-    print("\n[FASE 2] Avvio C&W Targeted Grid Search...\n")
+    print("\n[FASE 2] Avvio C&W Targeted Grid Search (Float64)...\n")
     
     if torch.cuda.is_available(): torch.cuda.empty_cache()
     
     with open(txt_log_path, 'w') as f:
-        f.write(f"REPORT SCOUTING CARLINI & WAGNER TARGETED (LLC SU 8631 CLASSI)\n")
+        f.write(f"REPORT SCOUTING CARLINI & WAGNER TARGETED (LLC SU 8631 CLASSI - FLOAT64)\n")
         f.write(f"Campioni testati: {total_samples}\n")
         f.write(f"Budget Massimo L_inf: {BUDGET_LINF}\n\n")
 
@@ -165,7 +182,7 @@ def main():
             # 1. Istanziamo la tua classe Ultra-veloce
             attack = CarliniLInfMethodPyTorch(
                 classifier=classifier, 
-                targeted=True, 
+                targeted=True,         # <--- TARGETED!
                 max_iter=steps,         
                 learning_rate=lr,
                 batch_size=BATCH_SIZE,
@@ -188,13 +205,12 @@ def main():
                 diffs = torch.abs(x_adv_tensor - x_clean_tensor)
                 l_infs = torch.amax(diffs, dim=(1, 2, 3)).cpu().numpy()
                 
-                # Successo = la rete predice la least-likely class!
+                # SUCCESSO = La rete predice ESATTAMENTE il bersaglio LLC
                 success_np = (adv_preds == y_target_tensor).cpu().numpy()
             
             l_min = l_infs.min()
             l_mean = l_infs.mean()
             l_median = np.median(l_infs)
-            l_p95 = np.percentile(l_infs, 95)
             l_max = l_infs.max()
             
             within_budget_mask = l_infs <= BUDGET_LINF
@@ -207,7 +223,7 @@ def main():
             
             plot_data[lr]['iters'].append(steps)
             plot_data[lr]['acc'].append(targeted_asr * 100) # Salviamo la Targeted ASR (%)
-            plot_data[lr]['linf'].append(l_max) # Meglio plottare il MAX per garantire il budget
+            plot_data[lr]['linf'].append(l_max) 
             
             stats_str = (
                 f"   Linf stats: min={l_min:.4f}, mean={l_mean:.4f}, median={l_median:.4f}, max={l_max:.4f}\n"
@@ -222,18 +238,14 @@ def main():
                 f.write(log_str + "\n")
                 f.write(stats_str)
                 
-            # EARLY STOPPING (Se abbiamo raggiunto il 100% di t-ASR)
+            # EARLY STOPPING
             if targeted_asr == 1.0:
                 msg = f"   [!] Targeted ASR arrivato al 100%. Salto max_iter successivi per questo LR per risparmiare tempo.\n"
                 print(msg)
                 with open(txt_log_path, 'a') as f:
                     f.write(msg)
                     
-                # Riempiamo i valori mancanti per il grafico
-                remaining_iters = len(max_iters_list) - len(plot_data[lr]['acc'])
-                plot_data[lr]['acc'].extend([100.0] * remaining_iters)
-                plot_data[lr]['linf'].extend([l_max] * remaining_iters)
-                
+                # Ci fermiamo. Le liste mantengono la loro lunghezza reale.
                 plot_data[lr]['early_stopped'] = True
                 break 
 
@@ -271,9 +283,10 @@ def main():
             last_acc = accs[-1]
             last_linf = linfs[-1]
             
-            ax1.scatter(last_iter, last_acc, marker='*', s=350, color=color, edgecolor='black', linewidth=1.5, zorder=5)
-            ax2.scatter(last_iter, last_linf, marker='*', s=350, color=color, edgecolor='black', linewidth=1.5, zorder=5)
-            ax1.annotate("100%", (last_iter, last_acc), textcoords="offset points", xytext=(0, -20), ha='center', color=color, fontweight='bold', fontsize=10)
+            # DISEGNO LA "X" PER MODELLO DISTRUTTO
+            ax1.scatter(last_iter, last_acc, marker='X', s=350, color=color, edgecolor='black', linewidth=1.5, zorder=5)
+            ax2.scatter(last_iter, last_linf, marker='X', s=350, color=color, edgecolor='black', linewidth=1.5, zorder=5)
+            ax1.annotate("100% (Destroyed)", (last_iter, last_acc), textcoords="offset points", xytext=(0, -20), ha='center', color=color, fontweight='bold', fontsize=10)
 
     # Estetica Ax1 (ASR)
     ax1.set_title("Targeted ASR (Least-Likely) vs. Max Iterations", fontsize=14, fontweight='bold')
@@ -297,7 +310,7 @@ def main():
     num_cols = min(6, len(global_labels))
     fig.legend(global_handles, global_labels, loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=num_cols, fontsize=11, frameon=True)
     
-    plt.suptitle("Carlini & Wagner Targeted: Hyperparameter Tuning (Worst-Case LLC)", fontsize=18, y=1.02)
+    plt.suptitle("Carlini & Wagner Targeted: Hyperparameter Tuning", fontsize=18, y=1.02)
     plt.tight_layout() 
     
     plot_path = output_dir / "cw_targeted_tuning_analysis.png"
