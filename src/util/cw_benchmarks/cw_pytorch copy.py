@@ -12,24 +12,29 @@ from art.utils import check_and_transform_label_format, get_labels_np_array
 logger = logging.getLogger(__name__)
 
 class PyTorchCustomAdam:
-    """Traduzione 1:1 dell'Adam custom di ART."""
+    """Traduzione 1:1 dell'Adam custom di ART, vettorizzata per GPU."""
     def __init__(self, alpha=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-8):
         self.alpha = alpha
         self.beta_1 = beta_1
         self.beta_2 = beta_2
         self.epsilon = epsilon
-        self.m_dx = 0.0
-        self.v_dx = 0.0
+        # Inizializziamo a None, creeremo i tensori direttamente sulla GPU al primo step
+        self.m_dx = None
+        self.v_dx = None
 
     def update(self, niter: int, x: torch.Tensor, delta_x: torch.Tensor) -> torch.Tensor:
+        if self.m_dx is None:
+            self.m_dx = torch.zeros_like(delta_x)
+            self.v_dx = torch.zeros_like(delta_x)
+
         self.m_dx = self.beta_1 * self.m_dx + (1 - self.beta_1) * delta_x
         self.v_dx = self.beta_2 * self.v_dx + (1 - self.beta_2) * (delta_x ** 2)
+        
         m_dw_corr = self.m_dx / (1 - self.beta_1 ** niter)
         v_dw_corr = self.v_dx / (1 - self.beta_2 ** niter)
         
         x = x - self.alpha * (m_dw_corr / (torch.sqrt(v_dw_corr) + self.epsilon))
         return x
-
 
 class CarliniLInfMethodPyTorch(EvasionAttack):
     """
@@ -118,10 +123,28 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
         diff_abs = torch.abs(x_adv - x)
         # Fix per batching: tau deve fare broadcast con (B, C, H, W)
         tau_view = tau.view(-1, 1, 1, 1)
-        loss_2 = torch.sum(torch.clamp(diff_abs - tau_view, min=0.0).view(x_adv.size(0), -1), dim=1)
+        loss_2 = torch.sum(torch.clamp(diff_abs - tau_view, min=0.0).reshape(x_adv.size(0), -1), dim=1)
 
         loss = loss_1 * const + loss_2
         return z_predicted, loss, loss_1, loss_2
+    
+    def _loss_from_logits(self, z_predicted: torch.Tensor, x_adv: torch.Tensor, target: torch.Tensor, x: torch.Tensor, const: torch.Tensor, tau: torch.Tensor):
+        """Calcola la loss SENZA fare un nuovo forward pass, usando i logit già calcolati."""
+        z_target = torch.sum(z_predicted * target, dim=1)
+        min_z = torch.min(z_predicted, dim=1, keepdim=True)[0]
+        z_other = torch.max(z_predicted * (1 - target) + (min_z - 1.0) * target, dim=1)[0]
+
+        if self.targeted:
+            loss_1 = torch.clamp(z_other - z_target + self.confidence, min=0.0)
+        else:
+            loss_1 = torch.clamp(z_target - z_other + self.confidence, min=0.0)
+
+        diff_abs = torch.abs(x_adv - x)
+        tau_view = tau.view(-1, 1, 1, 1)
+        loss_2 = torch.sum(torch.clamp(diff_abs - tau_view, min=0.0).reshape(x_adv.size(0), -1), dim=1)
+
+        loss = loss_1 * const + loss_2
+        return loss
 
     def _art_manual_gradient(self, z_logits, y_batch, x_adv_det, x_adv_tanh, clip_min, clip_max, x_batch, tau: torch.Tensor):
         min_z = torch.min(z_logits, dim=1, keepdim=True)[0]
@@ -156,20 +179,24 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
             x_adv_batch = self._tanh_to_original(x_adv_batch_tanh, clip_min, clip_max)
             x_adv_det = x_adv_batch.detach().requires_grad_(True)
             
-            z_logits = self._forward_model(x_adv_det)
+            # 1. Forward Pass con Automatic Mixed Precision (AMP) per velocizzare InceptionResnet
+            with torch.autocast(device_type=self.device.type, dtype=torch.float16):
+                z_logits = self._forward_model(x_adv_det)
             
+            # Torniamo a float32 puro per la precisione millimetrica dei gradienti ART
+            z_logits = z_logits.float()
+            
+            # 2. Controllo Early Stopping PRIMA dell'update (Risparmiamo 1 intero forward pass!)
+            with torch.no_grad():
+                loss = self._loss_from_logits(z_logits, x_adv_det, y_batch, x_batch, const, tau)
+                if (loss < 0.001).all():
+                    break
+            
+            # 3. Calcolo del gradiente e update
             total_grad = self._art_manual_gradient(z_logits, y_batch, x_adv_det, x_adv_batch_tanh, clip_min, clip_max, x_batch, tau)
             
             with torch.no_grad():
                 x_adv_batch_tanh = adam.update(num_iter, x_adv_batch_tanh, total_grad)
-                
-            with torch.no_grad():
-                x_adv_new = self._tanh_to_original(x_adv_batch_tanh, clip_min, clip_max)
-                _, loss, _, _ = self._loss(x_adv_new, y_batch, x_batch, const, tau)
-                
-            # Interrompi se TUTTO il batch è sotto soglia
-            if (loss < 0.001).all():
-                break
                 
         with torch.no_grad():
             return self._tanh_to_original(x_adv_batch_tanh, clip_min, clip_max)
@@ -226,8 +253,10 @@ class CarliniLInfMethodPyTorch(EvasionAttack):
                         target_class = torch.argmax(y_batch, dim=1)
                         delta_i = torch.amax(torch.abs(x_adv_batch - x_batch), dim=(1, 2, 3))
                         
-                        # Match bug di ART: pred_class != target_class vale sia per Targeted che per Untargeted
-                        success_mask = (pred_class != target_class) & (delta_i < delta_i_best) & active_const_mask
+                        if self._targeted:
+                            success_mask = (pred_class == target_class) & (delta_i < delta_i_best) & active_const_mask
+                        else:
+                            success_mask = (pred_class != target_class) & (delta_i < delta_i_best) & active_const_mask
                         
                         if success_mask.any():
                             # Salviamo i migliori successi
